@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "job-agent"
+version = "0.1.0"
+description = "A review-first job search and application pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+api = ["fastapi>=0.115", "uvicorn>=0.30"]
+dev = ["pytest>=8.0", "ruff>=0.9"]
+
+[project.scripts]
+job-agent = "app:main"
+
+[tool.setuptools]
+py-modules = ["app", "config"]
+
+[tool.setuptools.packages.find]
+include = [
+  "agents*",
+  "api*",
+  "browser*",
+  "database*",
+  "evaluations*",
+  "models*",
+  "repositories*",
+  "services*",
+  "utils*",
+  "workflows*",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

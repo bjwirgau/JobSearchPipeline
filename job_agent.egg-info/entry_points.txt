@@ -1,0 +1,2 @@
+[console_scripts]
+job-agent = app:main

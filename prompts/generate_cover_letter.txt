@@ -1,0 +1,9 @@
+Draft a concise cover letter using only facts present in the candidate profile.
+
+Mark unknown hiring-manager details generically and do not invent achievements.
+
+CANDIDATE:
+{candidate_profile}
+
+JOB:
+{job_posting}

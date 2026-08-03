@@ -1,0 +1,9 @@
+Compare the candidate profile with the normalized job posting.
+
+Explain matched qualifications and gaps separately. Never invent candidate experience.
+
+CANDIDATE:
+{candidate_profile}
+
+JOB:
+{job_posting}

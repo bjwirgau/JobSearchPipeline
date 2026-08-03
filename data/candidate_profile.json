@@ -1,0 +1,44 @@
+{
+  "candidate_id": "replace-me",
+  "full_name": "Brandon Wirgau",
+  "email": "brandonjoelwirgau@gmail.com",
+  "location": "El Paso, TX",
+  "summary": "Senior software engineer with more than 10 years of experience building and supporting scalable e-commerce and full-stack applications. Extensive expertise in Adobe Commerce, Magento, PHP, MySQL, REST APIs, and JavaScript frameworks, including React and Angular. Experienced in system integrations, performance optimization, cloud infrastructure, CI/CD, security, and technical leadership. Currently pursuing a master’s degree in Applied Artificial Intelligence.",
+  "skills": [
+    "Adobe Commerce (Magento)",
+    "PHP",
+    "Laravel",
+    "React",
+    "JavaScript",
+    "TypeScript",
+    "Python",
+    "Java",
+    "MySQL",
+    "REST APIs",
+    "GraphQL",
+    "AWS",
+    "Docker",
+    "Git",
+    "CI/CD",
+    "Linux",
+    "System Integration",
+    "Performance Optimization",
+    "LangGraph",
+    "MLflow"
+  ],
+  "years_experience": 10,
+  "desired_titles": [
+    "Software Engineer",
+    "Software Developer",
+    "AI Engineer",
+    "Backend Engineer",
+    "Magento Developer",
+    "React Developer",
+    "PHP Developer"
+  ],
+  "desired_locations": [
+    "El Paso, TX"
+  ],
+  "remote_preference": "remote",
+  "resume_path": null
+}

@@ -1,0 +1,10 @@
+{
+  "source": "sample",
+  "external_id": "sample-001",
+  "title": "Data Engineer",
+  "company": "Example Company",
+  "url": "https://example.com/jobs/sample-001",
+  "location": "Denver, CO",
+  "description": "Responsibilities:\n- Build reliable data pipelines.\nRequirements:\n- Python\n- SQL\n- 2+ years of relevant experience.",
+  "is_remote": true
+}

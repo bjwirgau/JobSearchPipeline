@@ -1,0 +1,9 @@
+Suggest truthful resume emphasis for this job.
+
+Preserve the candidate's facts exactly. Do not invent skills, employers, dates, or outcomes.
+
+CANDIDATE:
+{candidate_profile}
+
+JOB:
+{job_posting}

@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.db
+.env
+.venv/
+.pytest_cache/
+.ruff_cache/
+data/generated_documents/*
+!data/generated_documents/.gitkeep

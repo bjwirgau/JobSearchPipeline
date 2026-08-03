@@ -1,0 +1,6 @@
+Extract factual job details from the posting below.
+
+Return only fields supported by the posting. Do not infer missing requirements.
+
+JOB POSTING:
+{job_description}
