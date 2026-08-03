@@ -67,6 +67,7 @@ class JobPosting:
     location: str = ""
     description: str = ""
     skills: tuple[str, ...] = ()
+    industries: tuple[str, ...] = ()
     responsibilities: tuple[str, ...] = ()
     requirements: tuple[str, ...] = ()
     employment_type: str | None = None
@@ -90,7 +91,7 @@ class JobPosting:
                 "job_id",
                 stable_hash(self.source, self.external_id),
             )
-        for field_name in ("skills", "responsibilities", "requirements"):
+        for field_name in ("skills", "industries", "responsibilities", "requirements"):
             object.__setattr__(self, field_name, _clean(getattr(self, field_name)))
         if self.salary_min is not None and self.salary_min < 0:
             raise ValueError("salary_min must not be negative")
@@ -118,6 +119,7 @@ class JobPosting:
             "location": self.location,
             "description": self.description,
             "skills": list(self.skills),
+            "industries": list(self.industries),
             "responsibilities": list(self.responsibilities),
             "requirements": list(self.requirements),
             "employment_type": self.employment_type,
@@ -142,6 +144,7 @@ class JobPosting:
             location=str(value.get("location", "")),
             description=str(value.get("description", "")),
             skills=tuple(value.get("skills", ())),
+            industries=tuple(value.get("industries", ())),
             responsibilities=tuple(value.get("responsibilities", ())),
             requirements=tuple(value.get("requirements", ())),
             employment_type=value.get("employment_type"),

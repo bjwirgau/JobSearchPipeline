@@ -5,6 +5,7 @@ from .embedding_service import EmbeddingService
 from .job_source_service import InMemoryJobSource, JobSourceService
 from .llm_service import LLMService
 from .notification_service import LoggingNotificationService, NotificationService
+from .resume_knowledge_service import ResumeKnowledgeError, ResumeKnowledgeService
 
 __all__ = [
     "DocumentService",
@@ -14,4 +15,6 @@ __all__ = [
     "LLMService",
     "LoggingNotificationService",
     "NotificationService",
+    "ResumeKnowledgeError",
+    "ResumeKnowledgeService",
 ]

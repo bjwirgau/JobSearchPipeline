@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "candidate_id": "replace-me",
   "full_name": "Brandon Wirgau",
   "email": "brandonjoelwirgau@gmail.com",
@@ -27,6 +28,25 @@
     "MLflow"
   ],
   "years_experience": 10,
+  "years": {
+    "PHP": 10,
+    "Magento": 10,
+    "React": 4,
+    "Java": 2
+  },
+  "industries": [
+    "Ecommerce",
+    "Retail"
+  ],
+  "roles": [],
+  "achievements": [],
+  "certifications": [
+    "Adobe Commerce "
+  ],
+  "education": [
+    "Bachelor of Science in Computer Engineering",
+    "Master of Science in Applied Artificial Intelligence"
+  ],
   "desired_titles": [
     "Software Engineer",
     "Software Developer",

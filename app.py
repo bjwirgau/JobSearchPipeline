@@ -1,4 +1,4 @@
-"""Application composition root for the Phase 1 job-agent foundation."""
+"""Application composition root for the Phase 2 job-agent foundation."""
 
 from __future__ import annotations
 
@@ -16,8 +16,13 @@ from agents import (
 )
 from config import Settings
 from database import Database, initialize_schema
-from repositories import ApplicationRepository, CandidateRepository, JobRepository
-from services import DocumentService, LoggingNotificationService
+from repositories import (
+    ApplicationRepository,
+    CandidateRepository,
+    JobRepository,
+    ResumeKnowledgeRepository,
+)
+from services import DocumentService, LoggingNotificationService, ResumeKnowledgeService
 from utils.logging import configure_logging
 from workflows import ApplicationWorkflow, JobSearchWorkflow
 
@@ -29,6 +34,8 @@ class ApplicationContainer:
     candidates: CandidateRepository
     jobs: JobRepository
     applications: ApplicationRepository
+    resume_knowledge: ResumeKnowledgeRepository
+    resume_knowledge_service: ResumeKnowledgeService
     job_search_workflow: JobSearchWorkflow
     application_workflow: ApplicationWorkflow
 
@@ -42,6 +49,8 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
     candidates = CandidateRepository(database)
     jobs = JobRepository(database)
     applications = ApplicationRepository(database)
+    resume_knowledge = ResumeKnowledgeRepository(database)
+    resume_knowledge_service = ResumeKnowledgeService(settings.candidate_profile_path)
     documents = DocumentService(settings.generated_documents_dir)
     notifications = LoggingNotificationService()
 
@@ -66,6 +75,8 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
         candidates=candidates,
         jobs=jobs,
         applications=applications,
+        resume_knowledge=resume_knowledge,
+        resume_knowledge_service=resume_knowledge_service,
         job_search_workflow=JobSearchWorkflow(
             search_agent=search_agent,
             parser_agent=parser_agent,
@@ -88,7 +99,7 @@ def main() -> None:
     configure_logging(settings.log_level)
     build_container(settings)
     logging.getLogger(__name__).info(
-        "Job Agent Phase 1 initialized (search=%s, submission=%s, database=%s)",
+        "Job Agent Phase 2 initialized (search=%s, submission=%s, database=%s)",
         settings.search_enabled,
         settings.application_submission_enabled,
         settings.database_path,

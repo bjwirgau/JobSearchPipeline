@@ -23,10 +23,25 @@ DEFAULT_SKILL_VOCABULARY = (
     "Spark",
 )
 
+DEFAULT_INDUSTRY_VOCABULARY = (
+    "Ecommerce",
+    "Retail",
+    "Financial Services",
+    "Healthcare",
+    "Education",
+    "Manufacturing",
+    "Logistics",
+)
+
 
 class ParserAgent:
-    def __init__(self, skill_vocabulary: tuple[str, ...] = DEFAULT_SKILL_VOCABULARY) -> None:
+    def __init__(
+        self,
+        skill_vocabulary: tuple[str, ...] = DEFAULT_SKILL_VOCABULARY,
+        industry_vocabulary: tuple[str, ...] = DEFAULT_INDUSTRY_VOCABULARY,
+    ) -> None:
         self._skill_vocabulary = skill_vocabulary
+        self._industry_vocabulary = industry_vocabulary
 
     def parse(self, job: JobPosting) -> JobPosting:
         responsibilities, requirements = self._extract_sections(job.description)
@@ -36,9 +51,15 @@ class ParserAgent:
             for skill in self._skill_vocabulary
             if normalize_text(skill) in normalized_description
         )
+        industries = tuple(
+            industry
+            for industry in self._industry_vocabulary
+            if normalize_text(industry) in normalized_description
+        )
         return replace(
             job,
             skills=job.skills or skills,
+            industries=job.industries or industries,
             responsibilities=job.responsibilities or responsibilities,
             requirements=job.requirements or requirements,
         )

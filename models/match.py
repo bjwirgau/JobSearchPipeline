@@ -15,9 +15,10 @@ class MatchBreakdown:
     title: float
     location: float
     experience: float
+    industry: float = 0.5
 
     def __post_init__(self) -> None:
-        for field_name in ("skills", "title", "location", "experience"):
+        for field_name in ("skills", "title", "location", "experience", "industry"):
             score = getattr(self, field_name)
             if not 0.0 <= score <= 1.0:
                 raise ValueError(f"{field_name} score must be between 0 and 1")
@@ -31,6 +32,7 @@ class MatchResult:
     breakdown: MatchBreakdown
     matched_skills: tuple[str, ...] = ()
     missing_skills: tuple[str, ...] = ()
+    skill_years: Mapping[str, float] = field(default_factory=dict)
     rationale: str = ""
     created_at: datetime = field(default_factory=utc_now)
 
@@ -48,9 +50,11 @@ class MatchResult:
                 "title": self.breakdown.title,
                 "location": self.breakdown.location,
                 "experience": self.breakdown.experience,
+                "industry": self.breakdown.industry,
             },
             "matched_skills": list(self.matched_skills),
             "missing_skills": list(self.missing_skills),
+            "skill_years": dict(self.skill_years),
             "rationale": self.rationale,
             "created_at": to_iso(self.created_at),
         }

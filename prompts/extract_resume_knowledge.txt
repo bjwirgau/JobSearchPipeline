@@ -1,0 +1,8 @@
+Convert the resume into factual structured knowledge.
+
+Return JSON with these fields: skills, years, industries, roles, achievements, certifications, and education.
+
+Use only information stated in the resume. Do not infer skill duration when dates or role evidence do not support it. Preserve uncertainty rather than inventing facts.
+
+RESUME:
+{resume_text}

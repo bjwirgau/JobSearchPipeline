@@ -9,6 +9,7 @@ from models import (
     CandidateProfile,
     JobPosting,
     MatchResult,
+    ResumeKnowledgeBase,
     SearchCriteria,
     SearchRunResult,
     WorkflowRun,
@@ -48,6 +49,7 @@ class JobSearchWorkflow:
         self,
         candidate: CandidateProfile,
         criteria: SearchCriteria,
+        resume_knowledge: ResumeKnowledgeBase | None = None,
     ) -> JobSearchWorkflowResult:
         run = WorkflowRun("job_search").record(
             WorkflowStage.SEARCH,
@@ -72,7 +74,10 @@ class JobSearchWorkflow:
             WorkflowStatus.COMPLETED,
             f"Parsed {len(parsed_jobs)} jobs",
         )
-        matches = tuple(self._matching.score(candidate, job) for job in parsed_jobs)
+        matches = tuple(
+            self._matching.score(candidate, job, resume_knowledge)
+            for job in parsed_jobs
+        )
         run = run.record(
             WorkflowStage.SCORE,
             WorkflowStatus.COMPLETED,

@@ -88,4 +88,5 @@ class Settings:
 
     def prepare_directories(self) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self.candidate_profile_path.parent.mkdir(parents=True, exist_ok=True)
         self.generated_documents_dir.mkdir(parents=True, exist_ok=True)

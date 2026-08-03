@@ -15,6 +15,7 @@ from .job import (
     SearchRunResult,
 )
 from .match import MatchBreakdown, MatchResult
+from .resume import ResumeKnowledgeBase, ResumeRole
 from .workflow import StageRecord, WorkflowRun, WorkflowStage, WorkflowStatus
 
 __all__ = [
@@ -26,6 +27,8 @@ __all__ = [
     "JobPosting",
     "MatchBreakdown",
     "MatchResult",
+    "ResumeKnowledgeBase",
+    "ResumeRole",
     "SearchCriteria",
     "SearchFailure",
     "SearchQuery",

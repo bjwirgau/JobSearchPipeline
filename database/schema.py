@@ -1,4 +1,4 @@
-"""Phase 1 SQLite schema."""
+"""Current SQLite schema for the job-agent foundation."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from utils.dates import to_iso, utc_now
 from .connection import Database
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -21,6 +21,14 @@ CREATE TABLE IF NOT EXISTS candidates (
     email TEXT NOT NULL,
     payload_json TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS resume_knowledge (
+    candidate_id TEXT PRIMARY KEY,
+    schema_version INTEGER NOT NULL,
+    payload_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(candidate_id) REFERENCES candidates(candidate_id)
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
