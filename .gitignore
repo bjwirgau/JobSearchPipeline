@@ -6,5 +6,6 @@ __pycache__/
 .venv/
 .pytest_cache/
 .ruff_cache/
+/test-results/
 data/generated_documents/*
 !data/generated_documents/.gitkeep

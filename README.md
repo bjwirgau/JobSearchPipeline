@@ -103,6 +103,14 @@ By default this creates `data/job_agent.sqlite3`, which is ignored by Git.
 Run the standard-library test suite:
 
 ```bash
+python3 tests/run_tests.py
+```
+
+The terminal displays a compact progress bar. Detailed per-test output is written to `test-results/unit-tests.log`; the entire `test-results/` directory is ignored by Git. Set `JOB_AGENT_TEST_REPORT` to use a different report path.
+
+To run Python's built-in test discovery directly with verbose console output, use:
+
+```bash
 python3 -m unittest discover -s tests -v
 ```
 
