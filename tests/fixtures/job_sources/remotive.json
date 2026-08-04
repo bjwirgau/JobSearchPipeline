@@ -1,0 +1,19 @@
+{
+  "0-legal-notice": "Remotive API Legal Notice",
+  "job-count": 1,
+  "jobs": [
+    {
+      "id": 701,
+      "url": "https://remotive.com/remote-jobs/software-dev/senior-software-engineer-701",
+      "title": "Senior Software Engineer",
+      "company_name": "Remote Criteria Inc",
+      "category": "Software Development",
+      "job_type": "full_time",
+      "publication_date": "2026-08-01T10:23:26Z",
+      "candidate_required_location": "USA",
+      "salary": "$145,000 - $180,000",
+      "tags": ["PHP", "AWS"],
+      "description": "<p>Build remote APIs with PHP and AWS.</p>"
+    }
+  ]
+}

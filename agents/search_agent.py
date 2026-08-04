@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import re
+import logging
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 
@@ -15,6 +17,7 @@ from models import (
 )
 from repositories import JobRepository
 from services import JobSourceService
+from utils.countries import remote_country_is_eligible
 from utils.text import normalize_text
 
 
@@ -38,15 +41,24 @@ class SearchQueryBuilder:
         seen: set[tuple[str, str, bool]] = set()
         for title in titles:
             for location in locations:
-                terms = ([f'"{title}"'] if title else []) + list(criteria.skills)
+                terms = [title] if title else list(
+                    criteria.required_keywords[:3] or criteria.skills[:3]
+                )
                 if criteria.remote_only:
                     terms.append("remote")
                 query = SearchQuery(
                     text=" ".join(terms),
                     title=title,
                     skills=criteria.skills,
+                    required_keywords=criteria.required_keywords,
                     location=location,
+                    location_radius_miles=criteria.location_radius_miles,
                     remote_only=criteria.remote_only,
+                    remote_country=criteria.remote_country,
+                    employment_types=criteria.employment_types,
+                    minimum_salary=criteria.minimum_salary,
+                    excluded_keywords=criteria.excluded_keywords,
+                    max_age_days=criteria.max_age_days,
                 )
                 signature = (
                     normalize_text(query.text),
@@ -95,8 +107,10 @@ class SearchAgent:
     async def search(self, criteria: SearchCriteria) -> SearchRunResult:
         if not self._enabled:
             raise SearchDisabledError(
-                "job search is disabled; set JOB_AGENT_SEARCH_ENABLED=true after configuring a source"
+                "job search is disabled; set JOB_AGENT_SEARCH_ENABLED=true after "
+                "configuring a source"
             )
+        logging.info(f"Search Criteria: {criteria}" )
         queries = self._query_builder.build(criteria)
         sources = self.select_sources(criteria)
         requests = [(source, query) for source in sources for query in queries]
@@ -167,12 +181,22 @@ class SearchAgent:
     def _passes_filters(self, job: JobPosting, criteria: SearchCriteria) -> bool:
         if criteria.remote_only and job.is_remote is not True:
             return False
+        if (
+            criteria.remote_country
+            and job.is_remote is True
+            and not remote_country_is_eligible(
+                criteria.remote_country,
+                job.remote_country_codes,
+                job.location,
+            )
+        ):
+            return False
         if criteria.locations and job.is_remote is not True:
             location = normalize_text(job.location)
             if not any(normalize_text(value) in location for value in criteria.locations):
                 return False
-        if criteria.employment_types and normalize_text(job.employment_type or "") not in {
-            normalize_text(value) for value in criteria.employment_types
+        if criteria.employment_types and _employment_key(job.employment_type or "") not in {
+            _employment_key(value) for value in criteria.employment_types
         }:
             return False
         highest_salary = job.salary_max if job.salary_max is not None else job.salary_min
@@ -182,7 +206,22 @@ class SearchAgent:
             and highest_salary < criteria.minimum_salary
         ):
             return False
-        haystack = normalize_text(" ".join((job.title, job.company, job.description)))
+        haystack = normalize_text(
+            " ".join(
+                (
+                    job.title,
+                    job.company,
+                    job.description,
+                    *job.skills,
+                    *job.requirements,
+                )
+            )
+        )
+        if any(
+            normalize_text(value) not in haystack
+            for value in criteria.required_keywords
+        ):
+            return False
         if any(normalize_text(value) in haystack for value in criteria.excluded_keywords):
             return False
         if criteria.max_age_days is not None and job.posted_at is not None:
@@ -195,3 +234,7 @@ class SearchAgent:
             if posted_at < now - timedelta(days=criteria.max_age_days):
                 return False
         return True
+
+
+def _employment_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.casefold())

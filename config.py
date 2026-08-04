@@ -11,6 +11,28 @@ from typing import Mapping
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
+@dataclass(frozen=True, slots=True)
+class SourceTarget:
+    company: str
+    value: str
+
+
+def _source_targets(value: str | None) -> tuple[SourceTarget, ...]:
+    if not value:
+        return ()
+    targets: list[SourceTarget] = []
+    for item in value.split(";"):
+        company, separator, target = item.partition("=")
+        company = company.strip()
+        target = target.strip()
+        if not separator or not company or not target:
+            raise ValueError(
+                "job source targets must use Company=token-or-url entries separated by semicolons"
+            )
+        targets.append(SourceTarget(company, target))
+    return tuple(targets)
+
+
 def _as_bool(value: str | None, *, default: bool = False) -> bool:
     if value is None:
         return default
@@ -52,6 +74,20 @@ class Settings:
     candidate_profile_path: Path = PROJECT_ROOT / "data" / "candidate_profile.json"
     generated_documents_dir: Path = PROJECT_ROOT / "data" / "generated_documents"
     search_enabled: bool = False
+    remote_country: str | None = None
+    adzuna_app_id: str | None = None
+    adzuna_app_key: str | None = None
+    adzuna_country: str = "us"
+    remotive_enabled: bool = False
+    usajobs_email: str | None = None
+    usajobs_api_key: str | None = None
+    greenhouse_boards: tuple[SourceTarget, ...] = ()
+    lever_sites: tuple[SourceTarget, ...] = ()
+    workday_tenants: tuple[SourceTarget, ...] = ()
+    career_pages: tuple[SourceTarget, ...] = ()
+    browser_fallback: str = "none"
+    http_timeout_seconds: float = 20.0
+    http_user_agent: str = "JobAgent/0.3 (+local-job-search)"
     application_submission_enabled: bool = False
     openai_api_key: str | None = None
 
@@ -80,11 +116,56 @@ class Settings:
                 PROJECT_ROOT,
             ),
             search_enabled=_as_bool(values.get("JOB_AGENT_SEARCH_ENABLED")),
+            remote_country=(
+                values.get("JOB_AGENT_REMOTE_COUNTRY", "").strip().casefold() or None
+            ),
+            adzuna_app_id=values.get("JOB_AGENT_ADZUNA_APP_ID") or None,
+            adzuna_app_key=values.get("JOB_AGENT_ADZUNA_APP_KEY") or None,
+            adzuna_country=values.get("JOB_AGENT_ADZUNA_COUNTRY", "us").casefold(),
+            remotive_enabled=_as_bool(values.get("JOB_AGENT_REMOTIVE_ENABLED")),
+            usajobs_email=values.get("JOB_AGENT_USAJOBS_EMAIL") or None,
+            usajobs_api_key=values.get("JOB_AGENT_USAJOBS_API_KEY") or None,
+            greenhouse_boards=_source_targets(
+                values.get("JOB_AGENT_GREENHOUSE_BOARDS")
+            ),
+            lever_sites=_source_targets(values.get("JOB_AGENT_LEVER_SITES")),
+            workday_tenants=_source_targets(values.get("JOB_AGENT_WORKDAY_TENANTS")),
+            career_pages=_source_targets(values.get("JOB_AGENT_CAREER_PAGES")),
+            browser_fallback=values.get("JOB_AGENT_BROWSER_FALLBACK", "none").casefold(),
+            http_timeout_seconds=float(
+                values.get("JOB_AGENT_HTTP_TIMEOUT_SECONDS", "20")
+            ),
+            http_user_agent=values.get(
+                "JOB_AGENT_HTTP_USER_AGENT",
+                "JobAgent/0.3 (+local-job-search)",
+            ),
             application_submission_enabled=_as_bool(
                 values.get("JOB_AGENT_APPLICATION_SUBMISSION_ENABLED")
             ),
             openai_api_key=values.get("OPENAI_API_KEY") or None,
         )
+
+    def __post_init__(self) -> None:
+        if self.remote_country is not None and (
+            len(self.remote_country) != 2 or not self.remote_country.isalpha()
+        ):
+            raise ValueError(
+                "JOB_AGENT_REMOTE_COUNTRY must be a two-letter country code"
+            )
+        if bool(self.adzuna_app_id) != bool(self.adzuna_app_key):
+            raise ValueError(
+                "JOB_AGENT_ADZUNA_APP_ID and JOB_AGENT_ADZUNA_APP_KEY must be set together"
+            )
+        if len(self.adzuna_country) != 2 or not self.adzuna_country.isalpha():
+            raise ValueError("JOB_AGENT_ADZUNA_COUNTRY must be a two-letter country code")
+        if bool(self.usajobs_email) != bool(self.usajobs_api_key):
+            raise ValueError(
+                "JOB_AGENT_USAJOBS_EMAIL and JOB_AGENT_USAJOBS_API_KEY must be set together"
+            )
+        if self.browser_fallback not in {"none", "playwright", "selenium"}:
+            raise ValueError("JOB_AGENT_BROWSER_FALLBACK must be none, playwright, or selenium")
+        if self.http_timeout_seconds <= 0:
+            raise ValueError("JOB_AGENT_HTTP_TIMEOUT_SECONDS must be greater than zero")
 
     def prepare_directories(self) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,4 +1,4 @@
-"""Source-adapter contract and a local in-memory Phase 1 implementation."""
+"""Source-adapter contract and a local in-memory implementation."""
 
 from __future__ import annotations
 

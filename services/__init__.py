@@ -2,6 +2,9 @@
 
 from .document_service import DocumentService
 from .embedding_service import EmbeddingService
+from .http_service import HttpClient, HttpResponse, RequestsHttpClient
+from .job_normalization_service import JobNormalizer
+from .job_source_factory import build_job_sources
 from .job_source_service import InMemoryJobSource, JobSourceService
 from .llm_service import LLMService
 from .notification_service import LoggingNotificationService, NotificationService
@@ -10,11 +13,16 @@ from .resume_knowledge_service import ResumeKnowledgeError, ResumeKnowledgeServi
 __all__ = [
     "DocumentService",
     "EmbeddingService",
+    "HttpClient",
+    "HttpResponse",
     "InMemoryJobSource",
     "JobSourceService",
+    "JobNormalizer",
     "LLMService",
     "LoggingNotificationService",
     "NotificationService",
     "ResumeKnowledgeError",
     "ResumeKnowledgeService",
+    "RequestsHttpClient",
+    "build_job_sources",
 ]

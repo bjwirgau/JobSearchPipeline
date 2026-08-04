@@ -1,0 +1,43 @@
+{
+  "LanguageCode": "EN",
+  "SearchResult": {
+    "SearchResultCount": 1,
+    "SearchResultCountAll": 1,
+    "SearchResultItems": [
+      {
+        "MatchedObjectId": "801",
+        "MatchedObjectDescriptor": {
+          "PositionID": "FED-801",
+          "PositionTitle": "Senior Software Engineer",
+          "PositionURI": "https://www.usajobs.gov/job/801",
+          "PositionLocationDisplay": "Anywhere in the U.S. (remote job)",
+          "OrganizationName": "Example Federal Agency",
+          "DepartmentName": "Department of Examples",
+          "JobCategory": [
+            {"Name": "Information Technology Management", "Code": "2210"}
+          ],
+          "PositionSchedule": [{"Name": "Full Time", "Code": "1"}],
+          "QualificationSummary": "Experience building PHP and AWS services is required.",
+          "PositionRemuneration": [
+            {
+              "MinimumRange": "150000",
+              "MaximumRange": "185000",
+              "RateIntervalCode": "PA",
+              "Description": "Per Year"
+            }
+          ],
+          "PublicationStartDate": "2026-08-01T00:00:00Z",
+          "UserArea": {
+            "Details": {
+              "MajorDuties": "Design and maintain public APIs.",
+              "Requirements": "Must be eligible to work for the federal government.",
+              "Evaluations": "Technical experience will be evaluated.",
+              "KeyRequirements": ["PHP", "AWS"],
+              "JobSummary": "Build reliable public services."
+            }
+          }
+        }
+      }
+    ]
+  }
+}

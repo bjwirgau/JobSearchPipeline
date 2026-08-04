@@ -1,0 +1,21 @@
+{
+  "jobs": [
+    {
+      "id": 101,
+      "title": "Senior Software Engineer",
+      "updated_at": "2026-08-01T12:00:00Z",
+      "location": {"name": "Remote - United States"},
+      "absolute_url": "https://boards.greenhouse.io/example/jobs/101",
+      "content": "<p>Build React and PHP services on AWS.</p><p>Salary: $140,000 - $180,000.</p>"
+    },
+    {
+      "id": 102,
+      "title": "Marketing Manager",
+      "updated_at": "2026-08-01T12:00:00Z",
+      "location": {"name": "New York, NY"},
+      "absolute_url": "https://boards.greenhouse.io/example/jobs/102",
+      "content": "Lead marketing programs."
+    }
+  ],
+  "meta": {"total": 2}
+}

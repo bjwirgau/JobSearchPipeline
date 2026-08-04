@@ -18,8 +18,11 @@ def _clean(values: tuple[str, ...]) -> tuple[str, ...]:
 class SearchCriteria:
     job_titles: tuple[str, ...] = ()
     skills: tuple[str, ...] = ()
+    required_keywords: tuple[str, ...] = ()
     locations: tuple[str, ...] = ()
+    location_radius_miles: int | None = None
     remote_only: bool = False
+    remote_country: str | None = None
     employment_types: tuple[str, ...] = ()
     minimum_salary: int | None = None
     excluded_keywords: tuple[str, ...] = ()
@@ -31,14 +34,24 @@ class SearchCriteria:
         for field_name in (
             "job_titles",
             "skills",
+            "required_keywords",
             "locations",
             "employment_types",
             "excluded_keywords",
             "source_names",
         ):
             object.__setattr__(self, field_name, _clean(getattr(self, field_name)))
-        if not self.job_titles and not self.skills:
-            raise ValueError("at least one job title or skill is required")
+        if not self.job_titles and not self.skills and not self.required_keywords:
+            raise ValueError(
+                "at least one job title, skill, or required keyword is required"
+            )
+        if self.location_radius_miles is not None and self.location_radius_miles <= 0:
+            raise ValueError("location_radius_miles must be greater than zero")
+        if self.remote_country is not None:
+            country = self.remote_country.strip().casefold()
+            if len(country) != 2 or not country.isalpha():
+                raise ValueError("remote_country must be a two-letter country code")
+            object.__setattr__(self, "remote_country", country)
         if self.minimum_salary is not None and self.minimum_salary < 0:
             raise ValueError("minimum_salary must not be negative")
         if self.max_age_days is not None and self.max_age_days < 0:
@@ -52,8 +65,15 @@ class SearchQuery:
     text: str
     title: str | None = None
     skills: tuple[str, ...] = ()
+    required_keywords: tuple[str, ...] = ()
     location: str | None = None
+    location_radius_miles: int | None = None
     remote_only: bool = False
+    remote_country: str | None = None
+    employment_types: tuple[str, ...] = ()
+    minimum_salary: int | None = None
+    excluded_keywords: tuple[str, ...] = ()
+    max_age_days: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +95,7 @@ class JobPosting:
     salary_max: int | None = None
     salary_currency: str | None = None
     is_remote: bool | None = None
+    remote_country_codes: tuple[str, ...] = ()
     posted_at: datetime | None = None
     discovered_at: datetime = field(default_factory=utc_now)
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False, compare=False)
@@ -91,8 +112,26 @@ class JobPosting:
                 "job_id",
                 stable_hash(self.source, self.external_id),
             )
-        for field_name in ("skills", "industries", "responsibilities", "requirements"):
+        for field_name in (
+            "skills",
+            "industries",
+            "responsibilities",
+            "requirements",
+            "remote_country_codes",
+        ):
             object.__setattr__(self, field_name, _clean(getattr(self, field_name)))
+        object.__setattr__(
+            self,
+            "remote_country_codes",
+            tuple(dict.fromkeys(value.casefold() for value in self.remote_country_codes)),
+        )
+        if any(
+            value != "*" and (len(value) != 2 or not value.isalpha())
+            for value in self.remote_country_codes
+        ):
+            raise ValueError(
+                "remote_country_codes values must be '*' or two-letter country codes"
+            )
         if self.salary_min is not None and self.salary_min < 0:
             raise ValueError("salary_min must not be negative")
         if self.salary_max is not None and self.salary_max < 0:
@@ -127,6 +166,7 @@ class JobPosting:
             "salary_max": self.salary_max,
             "salary_currency": self.salary_currency,
             "is_remote": self.is_remote,
+            "remote_country_codes": list(self.remote_country_codes),
             "posted_at": to_iso(self.posted_at),
             "discovered_at": to_iso(self.discovered_at),
             "raw": dict(self.raw),
@@ -152,6 +192,7 @@ class JobPosting:
             salary_max=value.get("salary_max"),
             salary_currency=value.get("salary_currency"),
             is_remote=value.get("is_remote"),
+            remote_country_codes=tuple(value.get("remote_country_codes", ())),
             posted_at=from_iso(value.get("posted_at")),
             discovered_at=from_iso(value.get("discovered_at")) or utc_now(),
             raw=value.get("raw", {}),

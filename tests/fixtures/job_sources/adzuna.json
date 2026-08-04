@@ -1,0 +1,19 @@
+{
+  "count": 1,
+  "results": [
+    {
+      "id": "adzuna-601",
+      "title": "Senior Software Engineer",
+      "company": {"display_name": "Criteria Search Inc"},
+      "redirect_url": "https://www.adzuna.com/details/adzuna-601",
+      "location": {"display_name": "Denver, Colorado"},
+      "description": "Remote platform role requiring PHP, AWS, and API design.",
+      "category": {"label": "IT Jobs", "tag": "it-jobs"},
+      "contract_time": "full_time",
+      "contract_type": "permanent",
+      "salary_min": 155000,
+      "salary_max": 190000,
+      "created": "2026-08-01T12:00:00Z"
+    }
+  ]
+}

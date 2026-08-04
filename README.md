@@ -2,7 +2,7 @@
 
 Job Agent is a review-first Python pipeline for finding relevant roles, evaluating fit, preparing truthful application materials, and tracking application state.
 
-Phase 2 adds a structured resume knowledge base to the Phase 1 application foundation. The project still does **not** connect to live job boards, run a browser, or submit applications.
+Phase 3 adds criteria-based job discovery and normalized search results to the resume-aware foundation. Application submission remains disabled and review-first.
 
 ## Pipeline
 
@@ -66,6 +66,163 @@ The knowledge layer includes:
 
 Phase 2 does not extract a PDF automatically. Review and correct the structured JSON before using it for matching; this prevents unsupported experience claims from becoming part of an application.
 
+## Phase 3: Job Search Agent
+
+The search agent discovers jobs by criteria rather than iterating over a list of target companies. It builds one query per role and location, requests enabled discovery providers concurrently, normalizes their results into `JobPosting`, enforces hard filters, deduplicates across providers, stores jobs in SQLite, and hands them to parsing and matching.
+
+Search criteria include:
+
+- one or more roles and locations
+- required skills or other requirement keywords
+- remote-only work
+- remote-job country eligibility
+- location radius
+- accepted employment types
+- minimum annual salary
+- maximum posting age
+- excluded keywords
+
+| Discovery source | Coverage | Configuration |
+| --- | --- | --- |
+| Adzuna | Cross-company job index for a configured country | App ID, app key, and country code |
+| Remotive | Remote jobs across companies | Enable flag; no credentials |
+| USAJOBS | U.S. federal jobs | API key and registration email |
+
+Existing Greenhouse, Lever, Workday, company career-page, and authorized LinkedIn adapters remain available as optional supplemental sources. They are not required for discovery and are useful only when a direct company feed needs to be added to the broader results. LinkedIn is intentionally not scraped; the project does not automate login, crawl public pages, or bypass access controls.
+
+Normalized jobs consistently include source identity, title, company, URL, location, description, detected skills, employment type, salary range, currency, remote status, and posting date. Missing source fields remain `None` or empty rather than being invented.
+
+### Enable and Configure Job Searching
+
+#### 1. Install the HTTP search dependencies
+
+Discovery and supplemental sources use Requests; HTML career pages also use Beautiful Soup:
+
+```bash
+python3 -m pip install -e '.[search]'
+```
+
+#### 2. Create your local configuration
+
+Copy the environment template from the project root. `.env` is ignored by Git.
+
+```bash
+cp .env.example .env
+```
+
+#### 3. Configure one or more discovery providers
+
+For an immediate credential-free remote search, enable Remotive:
+
+```env
+JOB_AGENT_REMOTIVE_ENABLED=true
+```
+
+Remotive's public feed is delayed by 24 hours. Its terms require preserving the Remotive job URL and source attribution, which the normalized job does. Avoid scheduling it more than a few times per day.
+
+For broad location-based discovery, register for Adzuna API credentials and configure them:
+
+```env
+JOB_AGENT_ADZUNA_APP_ID=your-app-id
+JOB_AGENT_ADZUNA_APP_KEY=your-app-key
+JOB_AGENT_ADZUNA_COUNTRY=us
+```
+
+The country is a two-letter code supported by Adzuna, such as `us`, `ca`, or `gb`. The adapter sends role, required keywords, excluded keywords, location, radius, salary, employment type, and posting age to the provider when supported.
+
+To include U.S. federal roles, request a USAJOBS API key and use the same email address used during registration:
+
+```env
+JOB_AGENT_USAJOBS_EMAIL=you@example.com
+JOB_AGENT_USAJOBS_API_KEY=your-api-key
+```
+
+USAJOBS receives role, keyword requirements, location, radius, remote status, minimum salary, schedule, and posting age. You can enable all three discovery providers at once; results are combined and deduplicated.
+
+#### 4. Enable the search agent
+
+After configuring at least one provider, change the search flag in `.env`:
+
+```env
+JOB_AGENT_SEARCH_ENABLED=true
+JOB_AGENT_REMOTE_COUNTRY=us
+```
+
+`JOB_AGENT_REMOTE_COUNTRY` is optional and uses a two-letter country code. When
+set, remote listings must explicitly allow that country or be available
+worldwide. Listings restricted to another country—or with no country eligibility
+information—are excluded. The CLI can override it with `--remote-country`.
+
+Recommended HTTP settings are included in `.env.example`:
+
+```env
+JOB_AGENT_BROWSER_FALLBACK=none
+JOB_AGENT_HTTP_TIMEOUT_SECONDS=20
+JOB_AGENT_HTTP_USER_AGENT=JobAgent/0.3 (+your-contact-information)
+```
+
+#### 5. Optionally add a direct company source
+
+Direct ATS sources are supplemental. Each entry uses `Company=value`; multiple entries are separated with semicolons.
+
+```env
+JOB_AGENT_GREENHOUSE_BOARDS=Company One=companyone;Company Two=companytwo
+JOB_AGENT_LEVER_SITES=Example Company=example
+JOB_AGENT_WORKDAY_TENANTS=Example Company=https://example.wd1.myworkdayjobs.com/wday/cxs/example/Careers
+JOB_AGENT_CAREER_PAGES=Example Company=https://careers.example.com/jobs
+```
+
+Only configure public endpoints you are permitted to access. Workday response details can vary by tenant. LinkedIn cannot be configured through `.env`; it requires an approved API client injected through `build_job_sources()`.
+
+#### 6. Optionally enable a browser fallback
+
+Dynamic career pages can fall back to Playwright or Selenium only when the initial HTTP response contains no job JSON-LD:
+
+```bash
+python3 -m pip install -e '.[browser]'
+python3 -m playwright install chromium
+```
+
+Then select the browser in `.env`:
+
+```env
+JOB_AGENT_BROWSER_FALLBACK=playwright
+```
+
+Playwright is preferred. Use `selenium` only for a site that cannot be handled reliably with HTTP or Playwright. Browser fallback never performs login or CAPTCHA handling.
+
+#### 7. Run a search
+
+Run every enabled provider using the desired titles, locations, and resume knowledge from `data/candidate_profile.json`:
+
+```bash
+python3 app.py --search
+```
+
+Override the profile defaults and add explicit hard filters with CLI options:
+
+```bash
+python3 app.py --search \
+  --title "Senior Software Engineer" \
+  --requirement PHP \
+  --requirement AWS \
+  --location "Denver, CO" \
+  --radius 50 \
+  --remote-country us \
+  --employment-type full-time \
+  --minimum-salary 140000 \
+  --max-age-days 14 \
+  --exclude internship \
+  --source adzuna \
+  --limit 25
+```
+
+Repeat `--title`, `--requirement`, `--location`, `--employment-type`, or `--exclude` to provide multiple values. Add `--remote` to require an explicitly remote job. Required keywords are pushed to providers that support them and are checked again after normalization.
+
+Discovery source names are `adzuna`, `remotive`, and `usajobs`. Supplemental names are `greenhouse`, `lever`, `workday`, and `career_page`; `linkedin` becomes available only when an approved client is injected. Omitting `--source` searches every enabled source.
+
+Results are normalized, filtered, deduplicated, scored, printed to the terminal, and stored in the configured SQLite database. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one provider is configured.
+
 Live search and application submission are disabled by default:
 
 ```env
@@ -107,7 +264,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-The Phase 2 core has no third-party runtime dependencies. Install the project in editable mode if desired:
+The local models, storage, and tests have no third-party runtime dependencies. Install the project in editable mode if desired:
 
 ```bash
 python3 -m pip install -e .
@@ -147,7 +304,7 @@ To run Python's built-in test discovery directly with verbose console output, us
 python3 -m unittest discover -s ./tests -p 'test_*.py' -v
 ```
 
-The suite covers resume knowledge, parsing, matching, SQLite persistence, the search safety flag, and a network-free in-memory search.
+The suite covers resume knowledge, parsing, matching, SQLite persistence, the search safety flag, and fixture-based normalization for every Phase 3 source without making network requests.
 
 ## Optional API
 
@@ -171,4 +328,4 @@ python3 -m pip install -e '.[api]'
 
 ## Next Phase
 
-The next phase can add evidence links from each structured resume fact back to a role or source passage, plus one concrete job source, match persistence, and a review interface. Live application automation should remain out of scope until validation, approval auditing, and platform-specific dry runs are reliable.
+The next phase can add source health telemetry, pagination checkpoints, evidence links, match persistence, and a review interface. Live application automation should remain out of scope until validation, approval auditing, and platform-specific dry runs are reliable.

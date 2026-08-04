@@ -60,5 +60,6 @@
     "El Paso, TX"
   ],
   "remote_preference": "remote",
+  "remote_country": "US",
   "resume_path": null
 }

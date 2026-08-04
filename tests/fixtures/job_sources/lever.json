@@ -1,0 +1,21 @@
+[
+  {
+    "id": "lever-201",
+    "text": "Senior Software Engineer",
+    "hostedUrl": "https://jobs.lever.co/example/lever-201",
+    "descriptionPlain": "Develop Laravel and MySQL services deployed with Docker.",
+    "additionalPlain": "",
+    "createdAt": 1785585600000,
+    "categories": {
+      "location": "Remote, US",
+      "team": "Engineering",
+      "commitment": "Full-time"
+    },
+    "salaryRange": {
+      "min": 130000,
+      "max": 170000,
+      "currency": "USD",
+      "interval": "per-year-salary"
+    }
+  }
+]

@@ -3,5 +3,15 @@
 from .browser_manager import BrowserManager, BrowserSession
 from .form_filler import FormFillPlan, FormFiller
 from .question_handler import QuestionHandler
+from .page_loader import BrowserDependencyError, PlaywrightPageLoader, SeleniumPageLoader
 
-__all__ = ["BrowserManager", "BrowserSession", "FormFillPlan", "FormFiller", "QuestionHandler"]
+__all__ = [
+    "BrowserDependencyError",
+    "BrowserManager",
+    "BrowserSession",
+    "FormFillPlan",
+    "FormFiller",
+    "PlaywrightPageLoader",
+    "QuestionHandler",
+    "SeleniumPageLoader",
+]

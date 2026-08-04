@@ -30,6 +30,8 @@ class JobRepositoryTests(unittest.TestCase):
             company="Example",
             url="https://example.com/jobs/1?utm_source=test",
             description="Original description",
+            is_remote=True,
+            remote_country_codes=("US",),
         )
         self.repository.save(job)
 
