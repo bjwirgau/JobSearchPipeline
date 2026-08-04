@@ -45,6 +45,12 @@ class JobSearchWorkflow:
         self._notifications = notifications
         self._review_threshold = review_threshold
 
+    def selected_source_names(
+        self,
+        criteria: SearchCriteria,
+    ) -> tuple[str, ...]:
+        return tuple(source.name for source in self._search.select_sources(criteria))
+
     async def run(
         self,
         candidate: CandidateProfile,

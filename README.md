@@ -110,17 +110,24 @@ Copy the environment template from the project root. `.env` is ignored by Git.
 cp .env.example .env
 ```
 
-#### 3. Configure one or more discovery providers
+#### 3. Configure one or more sources
 
-For an immediate credential-free remote search, enable Remotive:
+Defining an adapter in the code does not enable it. The source factory creates an adapter only when all of its required settings are present.
 
-```env
-JOB_AGENT_REMOTIVE_ENABLED=true
-```
+| CLI source name | Source type | Required configuration |
+| --- | --- | --- |
+| `adzuna` | Global discovery | `JOB_AGENT_ADZUNA_APP_ID` and `JOB_AGENT_ADZUNA_APP_KEY` |
+| `remotive` | Global remote discovery | `JOB_AGENT_REMOTIVE_ENABLED=true` |
+| `usajobs` | U.S. federal discovery | `JOB_AGENT_USAJOBS_EMAIL` and `JOB_AGENT_USAJOBS_API_KEY` |
+| `greenhouse` | Supplemental company feed | At least one `Company=board_token` in `JOB_AGENT_GREENHOUSE_BOARDS` |
+| `lever` | Supplemental company feed | At least one `Company=site_name` in `JOB_AGENT_LEVER_SITES` |
+| `workday` | Supplemental company feed | At least one `Company=public_cxs_url` in `JOB_AGENT_WORKDAY_TENANTS` |
+| `career_page` | Supplemental company page | At least one `Company=public_url` in `JOB_AGENT_CAREER_PAGES` |
+| `linkedin` | Approved partner integration | An authorized client passed to `build_job_sources()`; no `.env` configuration |
 
-Remotive's public feed is delayed by 24 hours. Its terms require preserving the Remotive job URL and source attribution, which the normalized job does. Avoid scheduling it more than a few times per day.
+##### Adzuna
 
-For broad location-based discovery, register for Adzuna API credentials and configure them:
+Register through the [Adzuna developer portal](https://developer.adzuna.com/) and copy the application ID and key into `.env`:
 
 ```env
 JOB_AGENT_ADZUNA_APP_ID=your-app-id
@@ -128,20 +135,86 @@ JOB_AGENT_ADZUNA_APP_KEY=your-app-key
 JOB_AGENT_ADZUNA_COUNTRY=us
 ```
 
-The country is a two-letter code supported by Adzuna, such as `us`, `ca`, or `gb`. The adapter sends role, required keywords, excluded keywords, location, radius, salary, employment type, and posting age to the provider when supported.
+Both credentials are required. `JOB_AGENT_ADZUNA_COUNTRY` defaults to `us` and selects the country index searched by Adzuna. Use a supported two-letter code such as `us`, `ca`, or `gb`.
 
-To include U.S. federal roles, request a USAJOBS API key and use the same email address used during registration:
+##### Remotive
+
+Remotive does not require credentials. Enable its public remote-jobs feed with:
+
+```env
+JOB_AGENT_REMOTIVE_ENABLED=true
+```
+
+The [Remotive public API](https://remotive.com/remote-jobs/api) is delayed by 24 hours. Preserve the normalized Remotive URL and source attribution, and avoid scheduling more than a few feed requests per day.
+
+##### USAJOBS
+
+Request a key from the [USAJOBS developer portal](https://developer.usajobs.gov/) and configure the key together with the email address used to request it:
 
 ```env
 JOB_AGENT_USAJOBS_EMAIL=you@example.com
 JOB_AGENT_USAJOBS_API_KEY=your-api-key
 ```
 
-USAJOBS receives role, keyword requirements, location, radius, remote status, minimum salary, schedule, and posting age. You can enable all three discovery providers at once; results are combined and deduplicated.
+Both values are required. This provider searches U.S. federal job announcements only.
+
+##### Greenhouse
+
+Configure a company display name and its board token:
+
+```env
+JOB_AGENT_GREENHOUSE_BOARDS=Example Company=example
+```
+
+The board token is the path segment in `https://boards.greenhouse.io/{board_token}`. For multiple boards, separate entries with semicolons:
+
+```env
+JOB_AGENT_GREENHOUSE_BOARDS=Company One=companyone;Company Two=companytwo
+```
+
+##### Lever
+
+Configure a company display name and its Lever site name:
+
+```env
+JOB_AGENT_LEVER_SITES=Example Company=example
+```
+
+The site name is the path segment in `https://jobs.lever.co/{site_name}`. Multiple `Company=site_name` entries use semicolon separators.
+
+##### Workday
+
+Configure the company display name and complete public CXS base URL:
+
+```env
+JOB_AGENT_WORKDAY_TENANTS=Example Company=https://example.wd1.myworkdayjobs.com/wday/cxs/example/Careers
+```
+
+The required value is the tenant-specific public CXS endpoint, not the visible careers-page URL. Workday response details can vary by tenant, so test each endpoint before scheduling it.
+
+##### Company career pages
+
+Configure a company display name and a public page containing Schema.org `JobPosting` JSON-LD:
+
+```env
+JOB_AGENT_CAREER_PAGES=Example Company=https://careers.example.com/jobs
+```
+
+Static JSON-LD pages need only the search dependencies. JavaScript-rendered pages may also require the optional browser fallback described below.
+
+##### LinkedIn
+
+LinkedIn cannot be enabled through `.env`. It requires an approved partner client supplied in application code:
+
+```python
+sources = build_job_sources(settings, linkedin_client=approved_client)
+```
+
+The stock CLI does not create this client. The project intentionally does not scrape LinkedIn, automate login, or bypass access controls.
 
 #### 4. Enable the search agent
 
-After configuring at least one provider, change the search flag in `.env`:
+After configuring at least one source, change the search flag in `.env`:
 
 ```env
 JOB_AGENT_SEARCH_ENABLED=true
@@ -161,20 +234,7 @@ JOB_AGENT_HTTP_TIMEOUT_SECONDS=20
 JOB_AGENT_HTTP_USER_AGENT=JobAgent/0.3 (+your-contact-information)
 ```
 
-#### 5. Optionally add a direct company source
-
-Direct ATS sources are supplemental. Each entry uses `Company=value`; multiple entries are separated with semicolons.
-
-```env
-JOB_AGENT_GREENHOUSE_BOARDS=Company One=companyone;Company Two=companytwo
-JOB_AGENT_LEVER_SITES=Example Company=example
-JOB_AGENT_WORKDAY_TENANTS=Example Company=https://example.wd1.myworkdayjobs.com/wday/cxs/example/Careers
-JOB_AGENT_CAREER_PAGES=Example Company=https://careers.example.com/jobs
-```
-
-Only configure public endpoints you are permitted to access. Workday response details can vary by tenant. LinkedIn cannot be configured through `.env`; it requires an approved API client injected through `build_job_sources()`.
-
-#### 6. Optionally enable a browser fallback
+#### 5. Optionally enable a browser fallback
 
 Dynamic career pages can fall back to Playwright or Selenium only when the initial HTTP response contains no job JSON-LD:
 
@@ -191,7 +251,7 @@ JOB_AGENT_BROWSER_FALLBACK=playwright
 
 Playwright is preferred. Use `selenium` only for a site that cannot be handled reliably with HTTP or Playwright. Browser fallback never performs login or CAPTCHA handling.
 
-#### 7. Run a search
+#### 6. Run a search
 
 Run every enabled provider using the desired titles, locations, and resume knowledge from `data/candidate_profile.json`:
 
@@ -221,7 +281,7 @@ Repeat `--title`, `--requirement`, `--location`, `--employment-type`, or `--excl
 
 Discovery source names are `adzuna`, `remotive`, and `usajobs`. Supplemental names are `greenhouse`, `lever`, `workday`, and `career_page`; `linkedin` becomes available only when an approved client is injected. Omitting `--source` searches every enabled source.
 
-Results are normalized, filtered, deduplicated, scored, printed to the terminal, and stored in the configured SQLite database. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one provider is configured.
+Results are normalized, filtered, deduplicated, scored, printed to the terminal, and stored in the configured SQLite database. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one source is configured.
 
 Live search and application submission are disabled by default:
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import logging
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 
@@ -110,7 +109,6 @@ class SearchAgent:
                 "job search is disabled; set JOB_AGENT_SEARCH_ENABLED=true after "
                 "configuring a source"
             )
-        logging.info(f"Search Criteria: {criteria}" )
         queries = self._query_builder.build(criteria)
         sources = self.select_sources(criteria)
         requests = [(source, query) for source in sources for query in queries]

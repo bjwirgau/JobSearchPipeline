@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import logging
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -21,7 +22,13 @@ from agents import (
 )
 from config import Settings
 from database import Database, initialize_schema
-from models import CandidateProfile, ResumeKnowledgeBase, SearchCriteria
+from models import (
+    CandidateProfile,
+    JobPosting,
+    MatchResult,
+    ResumeKnowledgeBase,
+    SearchCriteria,
+)
 from repositories import (
     ApplicationRepository,
     CandidateRepository,
@@ -199,6 +206,87 @@ def _search_criteria(
     )
 
 
+def _format_job_grid(
+    ranked: Sequence[tuple[JobPosting, MatchResult]],
+) -> str:
+    columns = (
+        ("#", 3),
+        ("Match", 5),
+        ("Title", 28),
+        ("Company", 22),
+        ("Location", 22),
+        ("Salary", 22),
+        ("Source", 12),
+        ("URL", 44),
+    )
+    rows = [
+        (
+            str(index),
+            f"{match.score:.0%}",
+            job.title,
+            job.company,
+            job.location or "Not provided",
+            _format_salary(job),
+            job.source,
+            job.url,
+        )
+        for index, (job, match) in enumerate(ranked, 1)
+    ]
+    widths = tuple(
+        min(
+            maximum,
+            max((len(header), *(len(str(row[index])) for row in rows))),
+        )
+        for index, (header, maximum) in enumerate(columns)
+    )
+    border = "+" + "+".join("-" * (width + 2) for width in widths) + "+"
+
+    def render_row(values: Sequence[str]) -> list[str]:
+        wrapped = [
+            textwrap.wrap(
+                " ".join(str(value).split()),
+                width=width,
+                break_long_words=True,
+                break_on_hyphens=False,
+            )
+            or [""]
+            for value, width in zip(values, widths)
+        ]
+        return [
+            "|"
+            + "|".join(
+                f" {parts[line] if line < len(parts) else '':<{width}} "
+                for parts, width in zip(wrapped, widths)
+            )
+            + "|"
+            for line in range(max(len(parts) for parts in wrapped))
+        ]
+
+    lines = [border, *render_row(tuple(header for header, _ in columns)), border]
+    for row in rows:
+        lines.extend(render_row(row))
+        lines.append(border)
+    return "\n".join(lines)
+
+
+def _format_salary(job: JobPosting) -> str:
+    currency = job.salary_currency or ""
+    if job.salary_min is None and job.salary_max is None:
+        return "Not disclosed"
+    if job.salary_min is not None and job.salary_max is not None:
+        amount = f"{job.salary_min:,}-{job.salary_max:,}"
+    elif job.salary_min is not None:
+        amount = f"{job.salary_min:,}+"
+    else:
+        amount = f"Up to {job.salary_max:,}"
+    return " ".join(value for value in (currency, amount) if value)
+
+
+def _format_searched_sources(source_names: Sequence[str]) -> str:
+    names = ", ".join(source_names) if source_names else "none"
+    return f"Searching sources ({len(source_names)}): {names}"
+
+
 async def _run_search(
     container: ApplicationContainer,
     arguments: argparse.Namespace,
@@ -210,6 +298,8 @@ async def _run_search(
         "Search criteria remote country: %s",
         criteria.remote_country,
     )
+    selected_sources = container.job_search_workflow.selected_source_names(criteria)
+    print(_format_searched_sources(selected_sources), flush=True)
     result = await container.job_search_workflow.run(candidate, criteria, knowledge)
     ranked = sorted(
         zip(result.jobs, result.matches),
@@ -221,18 +311,7 @@ async def _run_search(
         f"stored {result.search.stored_count}; "
         f"{len(result.search.failures)} source requests failed."
     )
-    for job, match in ranked:
-        salary = ""
-        if job.salary_min is not None or job.salary_max is not None:
-            salary = (
-                f" | salary={job.salary_currency or ''} "
-                f"{job.salary_min or '?'}-{job.salary_max or '?'}"
-            )
-        print(
-            f"{match.score:.0%} | {job.title} | {job.company} | "
-            f"{job.location or 'Location unavailable'}{salary}\n"
-            f"  {job.url}"
-        )
+    print(_format_job_grid(ranked))
     for failure in result.search.failures:
         logging.getLogger(__name__).warning(
             "source=%s query=%s error=%s: %s",
