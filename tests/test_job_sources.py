@@ -21,6 +21,7 @@ from services.job_sources import (
     LeverJobSource,
     LeverSite,
     LinkedInJobSource,
+    LinkedInWorkplaceType,
     RemotiveJobSource,
     USAJobsCredentials,
     USAJobsJobSource,
@@ -302,11 +303,19 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
         payload = self.http.calls[0][2]
         self.assertEqual(payload["searchQuery"], "Software Engineer PHP AWS")
         self.assertEqual(payload["location"], "United States")
-        self.assertEqual(payload["workplaceType"], "2")
+        self.assertEqual(
+            payload["workplaceType"],
+            LinkedInWorkplaceType.REMOTE.value,
+        )
         self.assertEqual(payload["jobType"], "F")
         self.assertEqual(payload["datePosted"], "r2592000")
         self.assertEqual(payload["maxJobs"], 10)
         self.assertEqual(self.http.headers[0]["Authorization"], "Bearer apify-token")
+
+    def test_linkedin_workplace_type_constants_document_actor_codes(self) -> None:
+        self.assertEqual(LinkedInWorkplaceType.ON_SITE.value, "1")
+        self.assertEqual(LinkedInWorkplaceType.REMOTE.value, "2")
+        self.assertEqual(LinkedInWorkplaceType.HYBRID.value, "3")
 
     def test_source_factory_builds_only_configured_sources(self) -> None:
         settings = Settings.from_env(

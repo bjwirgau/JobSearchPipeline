@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Mapping
 from urllib.parse import urlencode
 
@@ -19,6 +20,14 @@ LOGGER = logging.getLogger(__name__)
 
 DEFAULT_ACTOR_ID = "automation-lab/linkedin-jobs-scraper"
 MAX_JOBS_PER_RUN = 1000
+
+
+class LinkedInWorkplaceType(str, Enum):
+    """Workplace filter codes accepted by the configured LinkedIn Actor."""
+
+    ON_SITE = "1"
+    REMOTE = "2"
+    HYBRID = "3"
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,12 +83,10 @@ class LinkedInJobSource:
             salary_min, salary_max, salary_currency = parse_salary(
                 str(record.get("salary", ""))
             )
-            workplace_type = str(record.get("workplaceType") or "").casefold()
-            is_remote: bool | None = None
-            if "remote" in workplace_type or query.remote_only:
-                is_remote = True
-            elif workplace_type:
-                is_remote = False
+            is_remote = _remote_status(
+                record.get("workplaceType"),
+                remote_only=query.remote_only,
+            )
             industries = _strings(record.get("industries"))
             skills = _strings(record.get("skills"))
             try:
@@ -167,7 +174,7 @@ class LinkedInJobSource:
         elif query.remote_only:
             payload["location"] = "Remote"
         if query.remote_only:
-            payload["workplaceType"] = "2"
+            payload["workplaceType"] = LinkedInWorkplaceType.REMOTE.value
         if len(query.employment_types) == 1:
             job_type = _job_type(query.employment_types[0])
             if job_type:
@@ -186,6 +193,26 @@ def _strings(value: Any) -> tuple[str, ...]:
     if isinstance(value, (list, tuple, set)):
         return tuple(str(item).strip() for item in value if str(item).strip())
     return (str(value).strip(),) if str(value).strip() else ()
+
+
+def _remote_status(value: object, *, remote_only: bool) -> bool | None:
+    if remote_only:
+        return True
+    workplace_type = str(value or "").strip().casefold()
+    if workplace_type in {
+        LinkedInWorkplaceType.REMOTE.value,
+        "remote",
+    }:
+        return True
+    if workplace_type in {
+        LinkedInWorkplaceType.ON_SITE.value,
+        LinkedInWorkplaceType.HYBRID.value,
+        "on-site",
+        "onsite",
+        "hybrid",
+    }:
+        return False
+    return None
 
 
 def _country_name(code: str | None) -> str | None:
