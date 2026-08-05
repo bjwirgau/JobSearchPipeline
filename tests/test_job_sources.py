@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Mapping
 
 from config import Settings
 from models import SearchQuery
@@ -12,6 +13,7 @@ from services import HttpResponse, JobNormalizer, build_job_sources
 from services.job_sources import (
     AdzunaCredentials,
     AdzunaJobSource,
+    ApifyLinkedInConfig,
     CareerPage,
     CareerPageJobSource,
     GreenhouseBoard,
@@ -65,31 +67,6 @@ class FakeHttpClient:
         self.calls.append(("POST", url, payload))
         self.headers.append(headers)
         return self.responses[("POST", url)]
-
-
-class FakeLinkedInClient:
-    async def search_jobs(
-        self,
-        query: SearchQuery,
-        *,
-        limit: int,
-    ) -> tuple[Mapping[str, Any], ...]:
-        return (
-            {
-                "jobPostingId": "linkedin-501",
-                "title": "Senior Software Engineer",
-                "companyName": "Authorized Example",
-                "jobPostingUrl": "https://www.linkedin.com/jobs/view/linkedin-501",
-                "location": "Remote - United States",
-                "description": "Build Java and AWS services.",
-                "skills": ["Java", "AWS"],
-                "salaryMin": 150000,
-                "salaryMax": 200000,
-                "salaryCurrency": "USD",
-                "isRemote": True,
-                "datePosted": "2026-08-01",
-            },
-        )
 
 
 class FakePageLoader:
@@ -297,18 +274,39 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(jobs), 1)
         self.assertEqual(loader.urls, [url])
 
-    async def test_linkedin_requires_an_authorized_client_boundary(self) -> None:
+    async def test_linkedin_runs_apify_actor_and_normalizes_dataset(self) -> None:
+        url = (
+            "https://api.apify.com/v2/acts/automation-lab~linkedin-jobs-scraper/"
+            "run-sync-get-dataset-items?clean=true&maxItems=10&timeout=120"
+        )
+        self.http.add("POST", url, "linkedin_apify.json", "application/json")
         source = LinkedInJobSource(
-            FakeLinkedInClient(),
+            ApifyLinkedInConfig("apify-token"),
+            http=self.http,
             normalizer=self.normalizer,
         )
 
-        jobs = await source.search(self.query, limit=10)
+        jobs = await source.search(replace(self.query, location=None), limit=10)
 
         self.assertEqual(len(jobs), 1)
-        self.assertEqual(jobs[0].source, "linkedin")
-        self.assertEqual(jobs[0].company, "Authorized Example")
-        self.assertEqual(jobs[0].skills, ("Java", "AWS"))
+        job = jobs[0]
+        self.assertEqual(job.source, "linkedin")
+        self.assertEqual(job.company, "Apify Example")
+        self.assertEqual(job.skills, ("PHP", "AWS"))
+        self.assertEqual(job.industries, ("Software Development",))
+        self.assertEqual((job.salary_min, job.salary_max), (150000, 190000))
+        self.assertEqual(job.salary_currency, "USD")
+        self.assertTrue(job.is_remote)
+        self.assertEqual(job.remote_country_codes, ("us",))
+        self.assertIsNotNone(job.posted_at)
+        payload = self.http.calls[0][2]
+        self.assertEqual(payload["searchQuery"], "Software Engineer PHP AWS")
+        self.assertEqual(payload["location"], "United States")
+        self.assertEqual(payload["workplaceType"], "2")
+        self.assertEqual(payload["jobType"], "F")
+        self.assertEqual(payload["datePosted"], "r2592000")
+        self.assertEqual(payload["maxJobs"], 10)
+        self.assertEqual(self.http.headers[0]["Authorization"], "Bearer apify-token")
 
     def test_source_factory_builds_only_configured_sources(self) -> None:
         settings = Settings.from_env(
@@ -318,6 +316,7 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
                 "JOB_AGENT_REMOTIVE_ENABLED": "true",
                 "JOB_AGENT_USAJOBS_EMAIL": "developer@example.com",
                 "JOB_AGENT_USAJOBS_API_KEY": "api-key",
+                "JOB_AGENT_APIFY_API_TOKEN": "apify-token",
                 "JOB_AGENT_GREENHOUSE_BOARDS": "Example=example",
                 "JOB_AGENT_LEVER_SITES": "Example=example",
                 "JOB_AGENT_WORKDAY_TENANTS": (
@@ -336,6 +335,7 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
                 "adzuna",
                 "remotive",
                 "usajobs",
+                "linkedin",
                 "greenhouse",
                 "lever",
                 "workday",

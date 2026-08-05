@@ -81,6 +81,9 @@ class Settings:
     remotive_enabled: bool = False
     usajobs_email: str | None = None
     usajobs_api_key: str | None = None
+    apify_api_token: str | None = None
+    apify_linkedin_actor_id: str = "automation-lab/linkedin-jobs-scraper"
+    apify_timeout_seconds: float = 120.0
     greenhouse_boards: tuple[SourceTarget, ...] = ()
     lever_sites: tuple[SourceTarget, ...] = ()
     workday_tenants: tuple[SourceTarget, ...] = ()
@@ -125,6 +128,14 @@ class Settings:
             remotive_enabled=_as_bool(values.get("JOB_AGENT_REMOTIVE_ENABLED")),
             usajobs_email=values.get("JOB_AGENT_USAJOBS_EMAIL") or None,
             usajobs_api_key=values.get("JOB_AGENT_USAJOBS_API_KEY") or None,
+            apify_api_token=values.get("JOB_AGENT_APIFY_API_TOKEN") or None,
+            apify_linkedin_actor_id=values.get(
+                "JOB_AGENT_APIFY_LINKEDIN_ACTOR_ID",
+                "automation-lab/linkedin-jobs-scraper",
+            ),
+            apify_timeout_seconds=float(
+                values.get("JOB_AGENT_APIFY_TIMEOUT_SECONDS", "120")
+            ),
             greenhouse_boards=_source_targets(
                 values.get("JOB_AGENT_GREENHOUSE_BOARDS")
             ),
@@ -161,6 +172,16 @@ class Settings:
         if bool(self.usajobs_email) != bool(self.usajobs_api_key):
             raise ValueError(
                 "JOB_AGENT_USAJOBS_EMAIL and JOB_AGENT_USAJOBS_API_KEY must be set together"
+            )
+        if not self.apify_linkedin_actor_id.strip() or any(
+            character.isspace() for character in self.apify_linkedin_actor_id
+        ):
+            raise ValueError(
+                "JOB_AGENT_APIFY_LINKEDIN_ACTOR_ID must be a non-empty Actor ID"
+            )
+        if self.apify_timeout_seconds <= 0 or self.apify_timeout_seconds > 300:
+            raise ValueError(
+                "JOB_AGENT_APIFY_TIMEOUT_SECONDS must be between 1 and 300"
             )
         if self.browser_fallback not in {"none", "playwright", "selenium"}:
             raise ValueError("JOB_AGENT_BROWSER_FALLBACK must be none, playwright, or selenium")

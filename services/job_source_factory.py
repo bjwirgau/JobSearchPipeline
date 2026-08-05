@@ -13,7 +13,7 @@ from .job_source_service import JobSourceService
 from .job_sources import (
     AdzunaCredentials,
     AdzunaJobSource,
-    AuthorizedLinkedInClient,
+    ApifyLinkedInConfig,
     CareerPage,
     CareerPageJobSource,
     GreenhouseBoard,
@@ -33,7 +33,6 @@ def build_job_sources(
     settings: Settings,
     *,
     skill_vocabulary: Sequence[str] = (),
-    linkedin_client: AuthorizedLinkedInClient | None = None,
 ) -> tuple[JobSourceService, ...]:
     http = RequestsHttpClient(
         timeout_seconds=settings.http_timeout_seconds,
@@ -72,6 +71,22 @@ def build_job_sources(
             USAJobsJobSource(
                 USAJobsCredentials(settings.usajobs_email, settings.usajobs_api_key),
                 http=http,
+                normalizer=normalizer,
+            )
+        )
+    if settings.apify_api_token:
+        apify_http = RequestsHttpClient(
+            timeout_seconds=settings.apify_timeout_seconds + 10,
+            user_agent=settings.http_user_agent,
+        )
+        sources.append(
+            LinkedInJobSource(
+                ApifyLinkedInConfig(
+                    api_token=settings.apify_api_token,
+                    actor_id=settings.apify_linkedin_actor_id,
+                    timeout_seconds=settings.apify_timeout_seconds,
+                ),
+                http=apify_http,
                 normalizer=normalizer,
             )
         )
@@ -122,6 +137,4 @@ def build_job_sources(
                 browser_loader=browser_loader,
             )
         )
-    if linkedin_client:
-        sources.append(LinkedInJobSource(linkedin_client, normalizer=normalizer))
     return tuple(sources)

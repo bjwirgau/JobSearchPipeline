@@ -87,8 +87,9 @@ Search criteria include:
 | Adzuna | Cross-company job index for a configured country | App ID, app key, and country code |
 | Remotive | Remote jobs across companies | Enable flag; no credentials |
 | USAJOBS | U.S. federal jobs | API key and registration email |
+| LinkedIn via Apify | LinkedIn public job listings across companies | Apify API token; a compatible Actor ID is provided by default |
 
-Existing Greenhouse, Lever, Workday, company career-page, and authorized LinkedIn adapters remain available as optional supplemental sources. They are not required for discovery and are useful only when a direct company feed needs to be added to the broader results. LinkedIn is intentionally not scraped; the project does not automate login, crawl public pages, or bypass access controls.
+Existing Greenhouse, Lever, Workday, and company career-page adapters remain available as optional supplemental sources. They are not required for discovery and are useful only when a direct company feed needs to be added to the broader results. LinkedIn discovery is delegated to an Apify Store Actor; this project does not automate LinkedIn login or manage browser sessions.
 
 Normalized jobs consistently include source identity, title, company, URL, location, description, detected skills, employment type, salary range, currency, remote status, and posting date. Missing source fields remain `None` or empty rather than being invented.
 
@@ -123,7 +124,7 @@ Defining an adapter in the code does not enable it. The source factory creates a
 | `lever` | Supplemental company feed | At least one `Company=site_name` in `JOB_AGENT_LEVER_SITES` |
 | `workday` | Supplemental company feed | At least one `Company=public_cxs_url` in `JOB_AGENT_WORKDAY_TENANTS` |
 | `career_page` | Supplemental company page | At least one `Company=public_url` in `JOB_AGENT_CAREER_PAGES` |
-| `linkedin` | Approved partner integration | An authorized client passed to `build_job_sources()`; no `.env` configuration |
+| `linkedin` | Global discovery through Apify | `JOB_AGENT_APIFY_API_TOKEN`; the default compatible Actor ID can be overridden |
 
 ##### Adzuna
 
@@ -204,13 +205,17 @@ Static JSON-LD pages need only the search dependencies. JavaScript-rendered page
 
 ##### LinkedIn
 
-LinkedIn cannot be enabled through `.env`. It requires an approved partner client supplied in application code:
+Create an [Apify account](https://console.apify.com/) and copy the API token from the Console integration settings. Then configure:
 
-```python
-sources = build_job_sources(settings, linkedin_client=approved_client)
+```env
+JOB_AGENT_APIFY_API_TOKEN=your-apify-api-token
+JOB_AGENT_APIFY_LINKEDIN_ACTOR_ID=automation-lab/linkedin-jobs-scraper
+JOB_AGENT_APIFY_TIMEOUT_SECONDS=120
 ```
 
-The stock CLI does not create this client. The project intentionally does not scrape LinkedIn, automate login, or bypass access controls.
+The token alone enables the `linkedin` source; the Actor ID and timeout already have the defaults shown above. The integration uses the input and output contract of [`automation-lab/linkedin-jobs-scraper`](https://apify.com/automation-lab/linkedin-jobs-scraper): role and requirement terms become `searchQuery`, location or remote country becomes `location`, and supported employment, remote-only, result-count, and posting-age filters are sent to the Actor. Only override the Actor ID with an Actor that accepts the same fields and returns a compatible dataset.
+
+The request uses Apify's synchronous Actor endpoint and sends the token in the `Authorization` header. `--limit` is sent as both the Actor's `maxJobs` limit and the API's `maxItems` request limit, capped at the Actor's 1,000-job maximum. Actor runs can consume Apify credits, so review the Actor's current pricing before enabling this source. You are responsible for using retrieved data in accordance with applicable laws and platform terms.
 
 #### 4. Enable the search agent
 
@@ -279,7 +284,7 @@ python3 app.py --search \
 
 Repeat `--title`, `--requirement`, `--location`, `--employment-type`, or `--exclude` to provide multiple values. Add `--remote` to require an explicitly remote job. Required keywords are pushed to providers that support them and are checked again after normalization.
 
-Discovery source names are `adzuna`, `remotive`, and `usajobs`. Supplemental names are `greenhouse`, `lever`, `workday`, and `career_page`; `linkedin` becomes available only when an approved client is injected. Omitting `--source` searches every enabled source.
+Discovery source names are `adzuna`, `remotive`, `usajobs`, and `linkedin`. Supplemental names are `greenhouse`, `lever`, `workday`, and `career_page`. Omitting `--source` searches every enabled source.
 
 Results are normalized, filtered, deduplicated, scored, printed to the terminal, and stored in the configured SQLite database. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one source is configured.
 

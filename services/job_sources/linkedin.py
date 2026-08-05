@@ -1,24 +1,39 @@
-"""Authorized LinkedIn integration boundary without scraping or login automation."""
+"""LinkedIn job discovery through an Apify Store Actor."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any, Mapping, Protocol
+import logging
+from dataclasses import dataclass
+from typing import Any, Mapping
+from urllib.parse import urlencode
 
 from models import JobPosting, SearchCriteria, SearchQuery
-from services.job_normalization_service import JobNormalizer
+from services.http_service import HttpClient
+from services.job_normalization_service import JobNormalizer, parse_salary
+from utils.countries import COUNTRY_NAMES
+
+from .base import job_matches_query
 
 
-class AuthorizedLinkedInClient(Protocol):
-    """Client supplied only after LinkedIn partner/API approval."""
+LOGGER = logging.getLogger(__name__)
 
-    async def search_jobs(
-        self,
-        query: SearchQuery,
-        *,
-        limit: int,
-    ) -> Sequence[Mapping[str, Any]]:
-        """Return authorized LinkedIn job records."""
+DEFAULT_ACTOR_ID = "automation-lab/linkedin-jobs-scraper"
+MAX_JOBS_PER_RUN = 1000
+
+
+@dataclass(frozen=True, slots=True)
+class ApifyLinkedInConfig:
+    api_token: str
+    actor_id: str = DEFAULT_ACTOR_ID
+    timeout_seconds: float = 120.0
+
+    def __post_init__(self) -> None:
+        if not self.api_token.strip():
+            raise ValueError("Apify API token must not be empty")
+        if not self.actor_id.strip():
+            raise ValueError("Apify Actor ID must not be empty")
+        if self.timeout_seconds <= 0 or self.timeout_seconds > 300:
+            raise ValueError("Apify timeout must be between 1 and 300 seconds")
 
 
 class LinkedInJobSource:
@@ -26,44 +41,180 @@ class LinkedInJobSource:
 
     def __init__(
         self,
-        client: AuthorizedLinkedInClient,
+        config: ApifyLinkedInConfig,
         *,
+        http: HttpClient,
         normalizer: JobNormalizer,
     ) -> None:
-        self._client = client
+        self._config = config
+        self._http = http
         self._normalizer = normalizer
 
     def supports(self, criteria: SearchCriteria) -> bool:
-        return True
+        return bool(self._config.api_token)
 
     async def search(self, query: SearchQuery, *, limit: int) -> tuple[JobPosting, ...]:
-        records = await self._client.search_jobs(query, limit=limit)
+        actor_limit = min(limit, MAX_JOBS_PER_RUN)
+        response = await self._http.post_json(
+            self._run_url(actor_limit),
+            self._actor_input(query, actor_limit),
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self._config.api_token}",
+            },
+        )
+        records = response.json()
+        if not isinstance(records, list):
+            raise ValueError("unexpected Apify LinkedIn dataset response")
+
         jobs: list[JobPosting] = []
         for record in records:
-            raw_skills = record.get("skills", ())
-            if isinstance(raw_skills, str):
-                skills = tuple(
-                    value.strip() for value in raw_skills.split(",") if value.strip()
-                )
-            else:
-                skills = tuple(raw_skills)
-            jobs.append(
-                self._normalizer.normalize(
+            if not isinstance(record, Mapping):
+                continue
+            salary_min, salary_max, salary_currency = parse_salary(
+                str(record.get("salary", ""))
+            )
+            workplace_type = str(record.get("workplaceType") or "").casefold()
+            is_remote: bool | None = None
+            if "remote" in workplace_type or query.remote_only:
+                is_remote = True
+            elif workplace_type:
+                is_remote = False
+            industries = _strings(record.get("industries"))
+            skills = _strings(record.get("skills"))
+            try:
+                job = self._normalizer.normalize(
                     source=self.name,
-                    external_id=record.get("id") or record.get("jobPostingId"),
-                    title=record.get("title"),
-                    company=record.get("company") or record.get("companyName"),
-                    url=record.get("url") or record.get("jobPostingUrl"),
+                    external_id=(
+                        record.get("id")
+                        or record.get("jobId")
+                        or record.get("jobPostingId")
+                    ),
+                    title=record.get("title") or record.get("jobTitle"),
+                    company=record.get("companyName") or record.get("company"),
+                    url=(
+                        record.get("url")
+                        or record.get("jobUrl")
+                        or record.get("jobPostingUrl")
+                        or record.get("applyUrl")
+                    ),
                     location=record.get("location", ""),
-                    description=record.get("description", ""),
+                    description=(
+                        record.get("descriptionText")
+                        or record.get("description")
+                        or record.get("descriptionHtml")
+                        or ""
+                    ),
                     skills=skills,
-                    employment_type=record.get("employmentType"),
-                    salary_min=record.get("salaryMin"),
-                    salary_max=record.get("salaryMax"),
-                    salary_currency=record.get("salaryCurrency"),
-                    is_remote=record.get("isRemote"),
-                    posted_at=record.get("listedAt") or record.get("datePosted"),
+                    industries=industries,
+                    employment_type=(
+                        record.get("employmentType") or record.get("jobType")
+                    ),
+                    salary_min=record.get("salaryMin") or salary_min,
+                    salary_max=record.get("salaryMax") or salary_max,
+                    salary_currency=(
+                        record.get("salaryCurrency") or salary_currency
+                    ),
+                    is_remote=is_remote,
+                    remote_country_codes=(
+                        (query.remote_country,)
+                        if is_remote and query.remote_country
+                        else ()
+                    ),
+                    posted_at=(
+                        record.get("postedAt")
+                        or record.get("listedAt")
+                        or record.get("datePosted")
+                    ),
                     raw=record,
                 )
-            )
-        return tuple(jobs)[:limit]
+            except (TypeError, ValueError) as error:
+                LOGGER.warning("Skipping invalid Apify LinkedIn job: %s", error)
+                continue
+            if job_matches_query(job, query):
+                jobs.append(job)
+        return tuple(jobs)[:actor_limit]
+
+    def _run_url(self, limit: int) -> str:
+        actor_id = self._config.actor_id.strip().replace("/", "~")
+        parameters = urlencode(
+            {
+                "clean": "true",
+                "maxItems": limit,
+                "timeout": f"{self._config.timeout_seconds:g}",
+            }
+        )
+        return (
+            f"https://api.apify.com/v2/acts/{actor_id}/"
+            f"run-sync-get-dataset-items?{parameters}"
+        )
+
+    @staticmethod
+    def _actor_input(query: SearchQuery, limit: int) -> dict[str, object]:
+        required_terms = " ".join(query.required_keywords)
+        search_query = " ".join(
+            value for value in (query.title or query.text, required_terms) if value
+        )
+        payload: dict[str, object] = {
+            "searchQuery": search_query,
+            "maxJobs": limit,
+            "scrapeJobDetails": True,
+            "sortBy": "DD",
+        }
+        location = query.location or _country_name(query.remote_country)
+        if location:
+            payload["location"] = location
+        elif query.remote_only:
+            payload["location"] = "Remote"
+        if query.remote_only:
+            payload["workplaceType"] = "2"
+        if len(query.employment_types) == 1:
+            job_type = _job_type(query.employment_types[0])
+            if job_type:
+                payload["jobType"] = job_type
+        date_posted = _date_posted(query.max_age_days)
+        if date_posted:
+            payload["datePosted"] = date_posted
+        return payload
+
+
+def _strings(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return tuple(item.strip() for item in value.split(",") if item.strip())
+    if isinstance(value, (list, tuple, set)):
+        return tuple(str(item).strip() for item in value if str(item).strip())
+    return (str(value).strip(),) if str(value).strip() else ()
+
+
+def _country_name(code: str | None) -> str | None:
+    if not code:
+        return None
+    preferred = {"gb": "United Kingdom", "us": "United States"}
+    if code in preferred:
+        return preferred[code]
+    aliases = COUNTRY_NAMES.get(code)
+    return aliases[0].title() if aliases else code.upper()
+
+
+def _job_type(value: str) -> str | None:
+    normalized = value.casefold().replace("_", "-").replace(" ", "-")
+    return {
+        "full-time": "F",
+        "part-time": "P",
+        "contract": "C",
+        "temporary": "T",
+        "internship": "I",
+        "intern": "I",
+    }.get(normalized)
+
+
+def _date_posted(max_age_days: int | None) -> str | None:
+    if max_age_days is None or max_age_days > 30:
+        return None
+    if max_age_days <= 1:
+        return "r86400"
+    if max_age_days <= 7:
+        return "r604800"
+    return "r2592000"

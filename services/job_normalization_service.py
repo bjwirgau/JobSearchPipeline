@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import html
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from typing import Any, Mapping, Sequence
 
@@ -43,8 +43,9 @@ DEFAULT_SKILLS = (
 )
 
 SALARY_PATTERN = re.compile(
-    r"\$\s*(?P<minimum>\d{2,3}(?:[,.]\d{3})+|\d{2,3})"
-    r"(?:\s*(?:-|–|—|to)\s*\$?\s*(?P<maximum>\d{2,3}(?:[,.]\d{3})+|\d{2,3}))?",
+    r"\$\s*(?P<minimum>\d[\d,]*(?:\.\d{2})?)"
+    r"(?:\s*(?:/[a-z]+|per\s+[a-z]+)?\s*(?:-|–|—|to)\s*\$?\s*"
+    r"(?P<maximum>\d[\d,]*(?:\.\d{2})?))?",
     re.IGNORECASE,
 )
 
@@ -85,7 +86,27 @@ def parse_datetime(value: object) -> datetime | None:
         if timestamp > 10_000_000_000:
             timestamp /= 1000
         return datetime.fromtimestamp(timestamp, tz=timezone.utc)
-    text = str(value).strip().replace("Z", "+00:00")
+    text = str(value).strip()
+    relative = re.fullmatch(
+        r"(?:about\s+)?(?P<count>\d+|a|an|one)\s+"
+        r"(?P<unit>minute|hour|day|week|month)s?\s+ago",
+        text.casefold(),
+    )
+    if relative:
+        raw_count = relative.group("count")
+        count = 1 if raw_count in {"a", "an", "one"} else int(raw_count)
+        unit_days = {"day": 1, "week": 7, "month": 30}
+        unit = relative.group("unit")
+        if unit == "minute":
+            delta = timedelta(minutes=count)
+        elif unit == "hour":
+            delta = timedelta(hours=count)
+        else:
+            delta = timedelta(days=count * unit_days[unit])
+        return datetime.now(timezone.utc) - delta
+    if text.casefold() in {"just now", "today"}:
+        return datetime.now(timezone.utc)
+    text = text.replace("Z", "+00:00")
     try:
         parsed = datetime.fromisoformat(text)
     except ValueError:
@@ -97,10 +118,10 @@ def parse_salary(value: str) -> tuple[int | None, int | None, str | None]:
     match = SALARY_PATTERN.search(value)
     if not match:
         return None, None, None
-    minimum = int(match.group("minimum").replace(",", "").replace(".", ""))
+    minimum = int(float(match.group("minimum").replace(",", "")))
     maximum_value = match.group("maximum")
     maximum = (
-        int(maximum_value.replace(",", "").replace(".", ""))
+        int(float(maximum_value.replace(",", "")))
         if maximum_value
         else None
     )

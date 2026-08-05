@@ -4,7 +4,7 @@ from .adzuna import AdzunaCredentials, AdzunaJobSource
 from .career_page import CareerPage, CareerPageJobSource
 from .greenhouse import GreenhouseBoard, GreenhouseJobSource
 from .lever import LeverJobSource, LeverSite
-from .linkedin import AuthorizedLinkedInClient, LinkedInJobSource
+from .linkedin import ApifyLinkedInConfig, LinkedInJobSource
 from .remotive import RemotiveJobSource
 from .usajobs import USAJobsCredentials, USAJobsJobSource
 from .workday import WorkdayJobSource, WorkdayTenant
@@ -12,7 +12,7 @@ from .workday import WorkdayJobSource, WorkdayTenant
 __all__ = [
     "AdzunaCredentials",
     "AdzunaJobSource",
-    "AuthorizedLinkedInClient",
+    "ApifyLinkedInConfig",
     "CareerPage",
     "CareerPageJobSource",
     "GreenhouseBoard",

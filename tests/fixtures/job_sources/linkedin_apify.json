@@ -1,0 +1,17 @@
+[
+  {
+    "id": "linkedin-501",
+    "title": "Senior Software Engineer",
+    "url": "https://www.linkedin.com/jobs/view/linkedin-501",
+    "companyName": "Apify Example",
+    "location": "Remote - United States",
+    "postedAt": "3 days ago",
+    "salary": "$150,000.00/yr - $190,000.00/yr",
+    "workplaceType": "Remote",
+    "descriptionText": "Build PHP and AWS services for our commerce platform.",
+    "employmentType": "Full-time",
+    "industries": "Software Development",
+    "applyUrl": "https://example.com/jobs/linkedin-501",
+    "scrapedAt": "2026-08-04T12:00:00.000Z"
+  }
+]
