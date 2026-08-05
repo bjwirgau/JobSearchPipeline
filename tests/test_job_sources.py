@@ -337,6 +337,7 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
                 "JOB_AGENT_REMOTIVE_ENABLED": "true",
                 "JOB_AGENT_USAJOBS_EMAIL": "developer@example.com",
                 "JOB_AGENT_USAJOBS_API_KEY": "api-key",
+                "JOB_AGENT_LINKEDIN_ENABLED": "true",
                 "JOB_AGENT_APIFY_API_TOKEN": "apify-token",
                 "JOB_AGENT_GREENHOUSE_BOARDS": "Example=example",
                 "JOB_AGENT_LEVER_SITES": "Example=example",
@@ -363,6 +364,16 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
                 "career_page",
             ),
         )
+
+    def test_source_factory_keeps_linkedin_disabled_when_token_is_present(self) -> None:
+        settings = Settings.from_env(
+            {"JOB_AGENT_APIFY_API_TOKEN": "apify-token"}
+        )
+
+        sources = build_job_sources(settings)
+
+        self.assertFalse(settings.linkedin_enabled)
+        self.assertNotIn("linkedin", tuple(source.name for source in sources))
 
 
 if __name__ == "__main__":

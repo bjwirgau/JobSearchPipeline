@@ -87,7 +87,7 @@ Search criteria include:
 | Adzuna | Cross-company job index for a configured country | App ID, app key, and country code |
 | Remotive | Remote jobs across companies | Enable flag; no credentials |
 | USAJOBS | U.S. federal jobs | API key and registration email |
-| LinkedIn via Apify | LinkedIn public job listings across companies | Apify API token; a compatible Actor ID is provided by default |
+| LinkedIn via Apify | LinkedIn public job listings across companies | Enable flag and Apify API token; a compatible Actor ID is provided by default |
 
 Existing Greenhouse, Lever, Workday, and company career-page adapters remain available as optional supplemental sources. They are not required for discovery and are useful only when a direct company feed needs to be added to the broader results. LinkedIn discovery is delegated to an Apify Store Actor; this project does not automate LinkedIn login or manage browser sessions.
 
@@ -124,7 +124,7 @@ Defining an adapter in the code does not enable it. The source factory creates a
 | `lever` | Supplemental company feed | At least one `Company=site_name` in `JOB_AGENT_LEVER_SITES` |
 | `workday` | Supplemental company feed | At least one `Company=public_cxs_url` in `JOB_AGENT_WORKDAY_TENANTS` |
 | `career_page` | Supplemental company page | At least one `Company=public_url` in `JOB_AGENT_CAREER_PAGES` |
-| `linkedin` | Global discovery through Apify | `JOB_AGENT_APIFY_API_TOKEN`; the default compatible Actor ID can be overridden |
+| `linkedin` | Global discovery through Apify | `JOB_AGENT_LINKEDIN_ENABLED=true` and `JOB_AGENT_APIFY_API_TOKEN`; the default compatible Actor ID can be overridden |
 
 ##### Adzuna
 
@@ -208,12 +208,13 @@ Static JSON-LD pages need only the search dependencies. JavaScript-rendered page
 Create an [Apify account](https://console.apify.com/) and copy the API token from the Console integration settings. Then configure:
 
 ```env
+JOB_AGENT_LINKEDIN_ENABLED=true
 JOB_AGENT_APIFY_API_TOKEN=your-apify-api-token
 JOB_AGENT_APIFY_LINKEDIN_ACTOR_ID=automation-lab/linkedin-jobs-scraper
 JOB_AGENT_APIFY_TIMEOUT_SECONDS=120
 ```
 
-The token alone enables the `linkedin` source; the Actor ID and timeout already have the defaults shown above. The integration uses the input and output contract of [`automation-lab/linkedin-jobs-scraper`](https://apify.com/automation-lab/linkedin-jobs-scraper): role and requirement terms become `searchQuery`, location or remote country becomes `location`, and supported employment, remote-only, result-count, and posting-age filters are sent to the Actor. Only override the Actor ID with an Actor that accepts the same fields and returns a compatible dataset.
+Both `JOB_AGENT_LINKEDIN_ENABLED=true` and a token are required for live LinkedIn search. Set the flag to `false` to keep the token configured while excluding LinkedIn from searches. The Actor ID and timeout already have the defaults shown above. The integration uses the input and output contract of [`automation-lab/linkedin-jobs-scraper`](https://apify.com/automation-lab/linkedin-jobs-scraper): role and requirement terms become `searchQuery`, location or remote country becomes `location`, and supported employment, remote-only, result-count, and posting-age filters are sent to the Actor. Only override the Actor ID with an Actor that accepts the same fields and returns a compatible dataset.
 
 The LinkedIn Actor workplace codes are represented by `LinkedInWorkplaceType`: `ON_SITE` (`1`), `REMOTE` (`2`), and `HYBRID` (`3`). This keeps raw numeric codes out of the source logic and makes future workplace filtering explicit.
 

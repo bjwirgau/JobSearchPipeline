@@ -81,6 +81,7 @@ class Settings:
     remotive_enabled: bool = False
     usajobs_email: str | None = None
     usajobs_api_key: str | None = None
+    linkedin_enabled: bool = False
     apify_api_token: str | None = None
     apify_linkedin_actor_id: str = "automation-lab/linkedin-jobs-scraper"
     apify_timeout_seconds: float = 120.0
@@ -128,6 +129,9 @@ class Settings:
             remotive_enabled=_as_bool(values.get("JOB_AGENT_REMOTIVE_ENABLED")),
             usajobs_email=values.get("JOB_AGENT_USAJOBS_EMAIL") or None,
             usajobs_api_key=values.get("JOB_AGENT_USAJOBS_API_KEY") or None,
+            linkedin_enabled=_as_bool(
+                values.get("JOB_AGENT_LINKEDIN_ENABLED")
+            ),
             apify_api_token=values.get("JOB_AGENT_APIFY_API_TOKEN") or None,
             apify_linkedin_actor_id=values.get(
                 "JOB_AGENT_APIFY_LINKEDIN_ACTOR_ID",

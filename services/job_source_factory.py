@@ -74,7 +74,7 @@ def build_job_sources(
                 normalizer=normalizer,
             )
         )
-    if settings.apify_api_token:
+    if settings.linkedin_enabled and settings.apify_api_token:
         apify_http = RequestsHttpClient(
             timeout_seconds=settings.apify_timeout_seconds + 10,
             user_agent=settings.http_user_agent,
