@@ -4,6 +4,7 @@ Version: 0.3.0
 Summary: A review-first job search and application pipeline
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown
+Requires-Dist: mysql-connector-python<10,>=9.7
 Provides-Extra: api
 Requires-Dist: fastapi>=0.115; extra == "api"
 Requires-Dist: uvicorn>=0.30; extra == "api"
@@ -40,9 +41,10 @@ Search → Normalize → Parse → Score → Review → Tailor → Apply → Tra
 
 ## Phase 1 Features
 
-- Dependency-free configuration and core runtime on Python 3.10+
+- Python 3.10+ configuration and core runtime
 - Validated dataclass models for candidates, jobs, matches, applications, and workflows
-- SQLite schema with candidate, job, application, and workflow tables
+- MySQL 8 schema with transactional candidate, job, application, and workflow tables
+- Native JSON columns for flexible entity payloads alongside indexed relational fields
 - Repository classes that isolate persistence from agents
 - Source-independent asynchronous search orchestration
 - In-memory job source for local development and tests
@@ -76,7 +78,7 @@ The knowledge layer includes:
 
 - `data/candidate_profile.json` as the single editable source for identity, preferences, and resume knowledge
 - JSON loading, validation, and atomic saving through `ResumeKnowledgeService`
-- SQLite persistence through `ResumeKnowledgeRepository`
+- MySQL persistence through `ResumeKnowledgeRepository`
 - Schema version 2 and an incremental resume-knowledge migration
 - Skill-specific years and industry alignment in match results
 - A cautious extraction prompt for a future resume-ingestion provider
@@ -87,7 +89,7 @@ Phase 2 does not extract a PDF automatically. Review and correct the structured 
 
 ## Phase 3: Job Search Agent
 
-The search agent discovers jobs by criteria rather than iterating over a list of target companies. It builds one query per role and location, requests enabled discovery providers concurrently, normalizes their results into `JobPosting`, enforces hard filters, deduplicates across providers, stores jobs in SQLite, and hands them to parsing and matching.
+The search agent discovers jobs by criteria rather than iterating over a list of target companies. It builds one query per role and location, requests enabled discovery providers concurrently, normalizes their results into `JobPosting`, enforces hard filters, deduplicates across providers, stores jobs in MySQL, and hands them to parsing and matching.
 
 Search criteria include:
 
@@ -106,8 +108,9 @@ Search criteria include:
 | Adzuna | Cross-company job index for a configured country | App ID, app key, and country code |
 | Remotive | Remote jobs across companies | Enable flag; no credentials |
 | USAJOBS | U.S. federal jobs | API key and registration email |
+| LinkedIn via Apify | LinkedIn public job listings across companies | Enable flag and Apify API token; a compatible Actor ID is provided by default |
 
-Existing Greenhouse, Lever, Workday, company career-page, and authorized LinkedIn adapters remain available as optional supplemental sources. They are not required for discovery and are useful only when a direct company feed needs to be added to the broader results. LinkedIn is intentionally not scraped; the project does not automate login, crawl public pages, or bypass access controls.
+Existing Greenhouse, Lever, Workday, and company career-page adapters remain available as optional supplemental sources. They are not required for discovery and are useful only when a direct company feed needs to be added to the broader results. LinkedIn discovery is delegated to an Apify Store Actor; this project does not automate LinkedIn login or manage browser sessions.
 
 Normalized jobs consistently include source identity, title, company, URL, location, description, detected skills, employment type, salary range, currency, remote status, and posting date. Missing source fields remain `None` or empty rather than being invented.
 
@@ -129,17 +132,24 @@ Copy the environment template from the project root. `.env` is ignored by Git.
 cp .env.example .env
 ```
 
-#### 3. Configure one or more discovery providers
+#### 3. Configure one or more sources
 
-For an immediate credential-free remote search, enable Remotive:
+Defining an adapter in the code does not enable it. The source factory creates an adapter only when all of its required settings are present.
 
-```env
-JOB_AGENT_REMOTIVE_ENABLED=true
-```
+| CLI source name | Source type | Required configuration |
+| --- | --- | --- |
+| `adzuna` | Global discovery | `JOB_AGENT_ADZUNA_APP_ID` and `JOB_AGENT_ADZUNA_APP_KEY` |
+| `remotive` | Global remote discovery | `JOB_AGENT_REMOTIVE_ENABLED=true` |
+| `usajobs` | U.S. federal discovery | `JOB_AGENT_USAJOBS_EMAIL` and `JOB_AGENT_USAJOBS_API_KEY` |
+| `greenhouse` | Supplemental company feed | At least one `Company=board_token` in `JOB_AGENT_GREENHOUSE_BOARDS` |
+| `lever` | Supplemental company feed | At least one `Company=site_name` in `JOB_AGENT_LEVER_SITES` |
+| `workday` | Supplemental company feed | At least one `Company=public_cxs_url` in `JOB_AGENT_WORKDAY_TENANTS` |
+| `career_page` | Supplemental company page | At least one `Company=public_url` in `JOB_AGENT_CAREER_PAGES` |
+| `linkedin` | Global discovery through Apify | `JOB_AGENT_LINKEDIN_ENABLED=true` and `JOB_AGENT_APIFY_API_TOKEN`; the default compatible Actor ID can be overridden |
 
-Remotive's public feed is delayed by 24 hours. Its terms require preserving the Remotive job URL and source attribution, which the normalized job does. Avoid scheduling it more than a few times per day.
+##### Adzuna
 
-For broad location-based discovery, register for Adzuna API credentials and configure them:
+Register through the [Adzuna developer portal](https://developer.adzuna.com/) and copy the application ID and key into `.env`:
 
 ```env
 JOB_AGENT_ADZUNA_APP_ID=your-app-id
@@ -147,20 +157,93 @@ JOB_AGENT_ADZUNA_APP_KEY=your-app-key
 JOB_AGENT_ADZUNA_COUNTRY=us
 ```
 
-The country is a two-letter code supported by Adzuna, such as `us`, `ca`, or `gb`. The adapter sends role, required keywords, excluded keywords, location, radius, salary, employment type, and posting age to the provider when supported.
+Both credentials are required. `JOB_AGENT_ADZUNA_COUNTRY` defaults to `us` and selects the country index searched by Adzuna. Use a supported two-letter code such as `us`, `ca`, or `gb`.
 
-To include U.S. federal roles, request a USAJOBS API key and use the same email address used during registration:
+##### Remotive
+
+Remotive does not require credentials. Enable its public remote-jobs feed with:
+
+```env
+JOB_AGENT_REMOTIVE_ENABLED=true
+```
+
+The [Remotive public API](https://remotive.com/remote-jobs/api) is delayed by 24 hours. Preserve the normalized Remotive URL and source attribution, and avoid scheduling more than a few feed requests per day.
+
+##### USAJOBS
+
+Request a key from the [USAJOBS developer portal](https://developer.usajobs.gov/) and configure the key together with the email address used to request it:
 
 ```env
 JOB_AGENT_USAJOBS_EMAIL=you@example.com
 JOB_AGENT_USAJOBS_API_KEY=your-api-key
 ```
 
-USAJOBS receives role, keyword requirements, location, radius, remote status, minimum salary, schedule, and posting age. You can enable all three discovery providers at once; results are combined and deduplicated.
+Both values are required. This provider searches U.S. federal job announcements only.
+
+##### Greenhouse
+
+Configure a company display name and its board token:
+
+```env
+JOB_AGENT_GREENHOUSE_BOARDS=Example Company=example
+```
+
+The board token is the path segment in `https://boards.greenhouse.io/{board_token}`. For multiple boards, separate entries with semicolons:
+
+```env
+JOB_AGENT_GREENHOUSE_BOARDS=Company One=companyone;Company Two=companytwo
+```
+
+##### Lever
+
+Configure a company display name and its Lever site name:
+
+```env
+JOB_AGENT_LEVER_SITES=Example Company=example
+```
+
+The site name is the path segment in `https://jobs.lever.co/{site_name}`. Multiple `Company=site_name` entries use semicolon separators.
+
+##### Workday
+
+Configure the company display name and complete public CXS base URL:
+
+```env
+JOB_AGENT_WORKDAY_TENANTS=Example Company=https://example.wd1.myworkdayjobs.com/wday/cxs/example/Careers
+```
+
+The required value is the tenant-specific public CXS endpoint, not the visible careers-page URL. Workday response details can vary by tenant, so test each endpoint before scheduling it.
+
+##### Company career pages
+
+Configure a company display name and a public page containing Schema.org `JobPosting` JSON-LD:
+
+```env
+JOB_AGENT_CAREER_PAGES=Example Company=https://careers.example.com/jobs
+```
+
+Static JSON-LD pages need only the search dependencies. JavaScript-rendered pages may also require the optional browser fallback described below.
+
+##### LinkedIn
+
+Create an [Apify account](https://console.apify.com/) and copy the API token from the Console integration settings. Then configure:
+
+```env
+JOB_AGENT_LINKEDIN_ENABLED=true
+JOB_AGENT_APIFY_API_TOKEN=your-apify-api-token
+JOB_AGENT_APIFY_LINKEDIN_ACTOR_ID=automation-lab/linkedin-jobs-scraper
+JOB_AGENT_APIFY_TIMEOUT_SECONDS=120
+```
+
+Both `JOB_AGENT_LINKEDIN_ENABLED=true` and a token are required for live LinkedIn search. Set the flag to `false` to keep the token configured while excluding LinkedIn from searches. The Actor ID and timeout already have the defaults shown above. The integration uses the input and output contract of [`automation-lab/linkedin-jobs-scraper`](https://apify.com/automation-lab/linkedin-jobs-scraper): role and requirement terms become `searchQuery`, location or remote country becomes `location`, and supported employment, remote-only, result-count, and posting-age filters are sent to the Actor. Only override the Actor ID with an Actor that accepts the same fields and returns a compatible dataset.
+
+The LinkedIn Actor workplace codes are represented by `LinkedInWorkplaceType`: `ON_SITE` (`1`), `REMOTE` (`2`), and `HYBRID` (`3`). This keeps raw numeric codes out of the source logic and makes future workplace filtering explicit.
+
+The request uses Apify's synchronous Actor endpoint and sends the token in the `Authorization` header. `--limit` is sent as both the Actor's `maxJobs` limit and the API's `maxItems` request limit, capped at the Actor's 1,000-job maximum. Actor runs can consume Apify credits, so review the Actor's current pricing before enabling this source. You are responsible for using retrieved data in accordance with applicable laws and platform terms.
 
 #### 4. Enable the search agent
 
-After configuring at least one provider, change the search flag in `.env`:
+After configuring at least one source, change the search flag in `.env`:
 
 ```env
 JOB_AGENT_SEARCH_ENABLED=true
@@ -180,20 +263,7 @@ JOB_AGENT_HTTP_TIMEOUT_SECONDS=20
 JOB_AGENT_HTTP_USER_AGENT=JobAgent/0.3 (+your-contact-information)
 ```
 
-#### 5. Optionally add a direct company source
-
-Direct ATS sources are supplemental. Each entry uses `Company=value`; multiple entries are separated with semicolons.
-
-```env
-JOB_AGENT_GREENHOUSE_BOARDS=Company One=companyone;Company Two=companytwo
-JOB_AGENT_LEVER_SITES=Example Company=example
-JOB_AGENT_WORKDAY_TENANTS=Example Company=https://example.wd1.myworkdayjobs.com/wday/cxs/example/Careers
-JOB_AGENT_CAREER_PAGES=Example Company=https://careers.example.com/jobs
-```
-
-Only configure public endpoints you are permitted to access. Workday response details can vary by tenant. LinkedIn cannot be configured through `.env`; it requires an approved API client injected through `build_job_sources()`.
-
-#### 6. Optionally enable a browser fallback
+#### 5. Optionally enable a browser fallback
 
 Dynamic career pages can fall back to Playwright or Selenium only when the initial HTTP response contains no job JSON-LD:
 
@@ -210,13 +280,27 @@ JOB_AGENT_BROWSER_FALLBACK=playwright
 
 Playwright is preferred. Use `selenium` only for a site that cannot be handled reliably with HTTP or Playwright. Browser fallback never performs login or CAPTCHA handling.
 
-#### 7. Run a search
+#### 6. Run a search
 
 Run every enabled provider using the desired titles, locations, and resume knowledge from `data/candidate_profile.json`:
 
 ```bash
 python3 app.py --search
 ```
+
+Preview the exact Actor input without requiring an Apify token or sending any request:
+
+```bash
+python3 app.py --search \
+  --source linkedin \
+  --dry-run \
+  --title "AI Engineer" \
+  --remote \
+  --remote-country us \
+  --limit 25
+```
+
+Dry-run output includes the configured Actor ID and each JSON query that a live LinkedIn search would submit. It exits before source selection, network access, and job storage. The flag supports only the `linkedin` source; when `--source` is omitted, LinkedIn is implied for the preview.
 
 Override the profile defaults and add explicit hard filters with CLI options:
 
@@ -238,9 +322,11 @@ python3 app.py --search \
 
 Repeat `--title`, `--requirement`, `--location`, `--employment-type`, or `--exclude` to provide multiple values. Add `--remote` to require an explicitly remote job. Required keywords are pushed to providers that support them and are checked again after normalization.
 
-Discovery source names are `adzuna`, `remotive`, and `usajobs`. Supplemental names are `greenhouse`, `lever`, `workday`, and `career_page`; `linkedin` becomes available only when an approved client is injected. Omitting `--source` searches every enabled source.
+When remote-only search is active, profile and CLI locations (and their radius) are omitted from source queries. If `JOB_AGENT_REMOTE_COUNTRY` or `--remote-country` is configured, providers may still receive that country as the remote eligibility scope; otherwise LinkedIn's Apify request omits `location` entirely.
 
-Results are normalized, filtered, deduplicated, scored, printed to the terminal, and stored in the configured SQLite database. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one provider is configured.
+Discovery source names are `adzuna`, `remotive`, `usajobs`, and `linkedin`. Supplemental names are `greenhouse`, `lever`, `workday`, and `career_page`. Omitting `--source` searches every enabled source.
+
+Results are normalized, filtered, deduplicated, scored, printed to the terminal, and stored in the configured MySQL database. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one source is configured.
 
 Live search and application submission are disabled by default:
 
@@ -257,13 +343,14 @@ Enabling a flag alone does not configure an external source, browser runtime, or
 .
 ├── app.py                         # Composition root
 ├── config.py                      # Environment settings
+├── docker-compose.yml            # Persistent MySQL development service
 ├── pyproject.toml                 # Packaging and optional dependencies
 ├── .env.example                   # Safe configuration template
 ├── agents/                        # Single-responsibility pipeline agents
 ├── models/                        # Shared domain and resume-knowledge models
 ├── services/                      # External capability boundaries
 ├── workflows/                     # Pipeline orchestration
-├── repositories/                  # Persistence interfaces and SQLite implementations
+├── repositories/                  # Persistence interfaces and MySQL implementations
 ├── database/                      # Connection, schema, and migration files
 ├── prompts/                       # Reusable LLM prompt templates
 ├── browser/                       # Guarded form planning and platform adapters
@@ -283,7 +370,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-The local models, storage, and tests have no third-party runtime dependencies. Install the project in editable mode if desired:
+Install the project and MySQL Connector/Python in editable mode:
 
 ```bash
 python3 -m pip install -e .
@@ -299,13 +386,57 @@ cp .env.example .env
 - Unified candidate profile and resume knowledge: `data/candidate_profile.json`
 - Sample job: `data/sample_jobs/sample_job.json`
 
-Initialize the SQLite database and application container:
+### Configure MySQL
+
+MySQL 8.4 is recommended. The included Docker Compose service runs MySQL in the background, restarts it unless explicitly stopped, and persists its data in the `job-agent-mysql-data` named volume.
+
+Configure distinct application and root passwords in `.env`:
+
+```env
+JOB_AGENT_MYSQL_HOST=127.0.0.1
+JOB_AGENT_MYSQL_PORT=3306
+JOB_AGENT_MYSQL_DATABASE=job_agent
+JOB_AGENT_MYSQL_USER=job_agent
+JOB_AGENT_MYSQL_PASSWORD=replace-with-a-strong-password
+JOB_AGENT_MYSQL_ROOT_PASSWORD=replace-with-a-different-strong-password
+JOB_AGENT_MYSQL_CONNECT_TIMEOUT=10
+```
+
+Start MySQL as a detached background service and check its health:
+
+```bash
+docker compose -f docker-compose.yml up --detach mysql
+docker compose -f docker-compose.yml ps mysql
+```
+
+The service remains running after tests and across Docker restarts. Stop it explicitly with `docker compose -f docker-compose.yml stop mysql`; start it again with `docker compose -f docker-compose.yml start mysql`. `docker compose -f docker-compose.yml down` removes the container and network but retains the named database volume unless `--volumes` is also specified.
+
+MySQL's initialization variables are applied only when the named volume is first created. Changing either password in `.env` later does not change an existing database account; update the account inside MySQL or deliberately create a new development volume.
+
+To use an existing MySQL server instead of Docker, create the database and application account manually. Run the following statements as a MySQL administrator, replacing the example password and host as needed:
+
+```sql
+CREATE DATABASE job_agent
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_0900_ai_ci;
+
+CREATE USER 'job_agent'@'127.0.0.1'
+    IDENTIFIED BY 'replace-with-a-strong-password';
+
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES
+    ON job_agent.*
+    TO 'job_agent'@'127.0.0.1';
+```
+
+The Docker-only root password setting is unnecessary when using an existing server. The committed `.env.example` contains placeholders only, while `.env` is ignored by Git. Use a deployment secret manager instead of a file in hosted environments. The application never includes the application password in its startup log or the `MySQLConfig` representation.
+
+The configured database must already exist. On startup, the application creates missing tables and records the current schema version:
 
 ```bash
 python3 app.py
 ```
 
-By default this creates `data/job_agent.sqlite3`, which is ignored by Git.
+Existing SQLite files are not read or migrated automatically. Export any data that must be retained and import it into MySQL before removing an old database file.
 
 ## Tests
 
@@ -323,7 +454,7 @@ To run Python's built-in test discovery directly with verbose console output, us
 python3 -m unittest discover -s ./tests -p 'test_*.py' -v
 ```
 
-The suite covers resume knowledge, parsing, matching, SQLite persistence, the search safety flag, and fixture-based normalization for every Phase 3 source without making network requests.
+The suite covers resume knowledge, parsing, matching, MySQL repository behavior, the search safety flag, and fixture-based normalization for every Phase 3 source without making network or live-database requests. Repository tests use an injected in-memory MySQL connector fake; use a separate integration environment to validate credentials and server permissions.
 
 ## Optional API
 

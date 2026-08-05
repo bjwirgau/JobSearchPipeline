@@ -22,7 +22,7 @@ from agents import (
     ValidationAgent,
 )
 from config import Settings
-from database import Database, initialize_schema
+from database import Database, MySQLConfig, initialize_schema
 from models import (
     CandidateProfile,
     JobPosting,
@@ -64,7 +64,16 @@ class ApplicationContainer:
 def build_container(settings: Settings | None = None) -> ApplicationContainer:
     settings = settings or Settings.from_env()
     settings.prepare_directories()
-    database = Database(settings.database_path)
+    database = Database(
+        MySQLConfig(
+            host=settings.mysql_host,
+            port=settings.mysql_port,
+            database=settings.mysql_database,
+            user=settings.mysql_user,
+            password=settings.mysql_password,
+            connection_timeout=settings.mysql_connect_timeout,
+        )
+    )
     initialize_schema(database)
 
     candidates = CandidateRepository(database)
@@ -382,10 +391,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_apify_dry_run(settings, arguments)
     container = build_container(settings)
     logging.getLogger(__name__).info(
-        "Job Agent Phase 3 initialized (search=%s, submission=%s, database=%s)",
+        "Job Agent Phase 3 initialized "
+        "(search=%s, submission=%s, database=%s@%s:%s/%s)",
         settings.search_enabled,
         settings.application_submission_enabled,
-        settings.database_path,
+        settings.mysql_user,
+        settings.mysql_host,
+        settings.mysql_port,
+        settings.mysql_database,
     )
     if arguments.search:
         return asyncio.run(_run_search(container, arguments))

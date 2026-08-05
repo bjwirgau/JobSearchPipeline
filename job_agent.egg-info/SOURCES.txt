@@ -70,8 +70,12 @@ services/job_sources/linkedin.py
 services/job_sources/remotive.py
 services/job_sources/usajobs.py
 services/job_sources/workday.py
+tests/__init__.py
+tests/mysql_fakes.py
 tests/test_app.py
+tests/test_application_repository.py
 tests/test_countries.py
+tests/test_database.py
 tests/test_job_repository.py
 tests/test_job_sources.py
 tests/test_matching_agent.py

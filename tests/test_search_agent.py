@@ -2,26 +2,24 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 
 from agents import SearchAgent, SearchDisabledError, SearchQueryBuilder
-from database import Database, initialize_schema
+from database import Database, MySQLConfig, initialize_schema
 from models import JobPosting, SearchCriteria
 from repositories import JobRepository
 from services import InMemoryJobSource
+from tests.mysql_fakes import FakeMySQLServer
 
 
 class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        self._temporary_directory = tempfile.TemporaryDirectory()
-        database = Database(Path(self._temporary_directory.name) / "test.sqlite3")
+        database = Database(
+            MySQLConfig(),
+            connect_factory=FakeMySQLServer().connect,
+        )
         initialize_schema(database)
         self.repository = JobRepository(database)
-
-    def tearDown(self) -> None:
-        self._temporary_directory.cleanup()
 
     async def test_search_is_disabled_by_default(self) -> None:
         agent = SearchAgent(sources=(), repository=self.repository)

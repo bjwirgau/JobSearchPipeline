@@ -29,6 +29,26 @@ class CountryEligibilityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "two-letter country code"):
             Settings.from_env({"JOB_AGENT_REMOTE_COUNTRY": "USA"})
 
+    def test_mysql_settings_are_loaded_and_password_is_hidden(self) -> None:
+        settings = Settings.from_env(
+            {
+                "JOB_AGENT_MYSQL_HOST": "mysql.internal",
+                "JOB_AGENT_MYSQL_PORT": "3307",
+                "JOB_AGENT_MYSQL_DATABASE": "job_agent_test",
+                "JOB_AGENT_MYSQL_USER": "test_user",
+                "JOB_AGENT_MYSQL_PASSWORD": "secret",
+                "JOB_AGENT_MYSQL_CONNECT_TIMEOUT": "4",
+            }
+        )
+
+        self.assertEqual(settings.mysql_host, "mysql.internal")
+        self.assertEqual(settings.mysql_port, 3307)
+        self.assertEqual(settings.mysql_database, "job_agent_test")
+        self.assertEqual(settings.mysql_user, "test_user")
+        self.assertEqual(settings.mysql_password, "secret")
+        self.assertEqual(settings.mysql_connect_timeout, 4)
+        self.assertNotIn("secret", repr(settings))
+
 
 if __name__ == "__main__":
     unittest.main()

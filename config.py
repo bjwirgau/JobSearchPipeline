@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
@@ -70,7 +70,12 @@ class Settings:
 
     environment: str = "development"
     log_level: str = "INFO"
-    database_path: Path = PROJECT_ROOT / "data" / "job_agent.sqlite3"
+    mysql_host: str = "127.0.0.1"
+    mysql_port: int = 3306
+    mysql_database: str = "job_agent"
+    mysql_user: str = "job_agent"
+    mysql_password: str | None = field(default=None, repr=False)
+    mysql_connect_timeout: int = 10
     candidate_profile_path: Path = PROJECT_ROOT / "data" / "candidate_profile.json"
     generated_documents_dir: Path = PROJECT_ROOT / "data" / "generated_documents"
     search_enabled: bool = False
@@ -104,9 +109,13 @@ class Settings:
         return cls(
             environment=values.get("JOB_AGENT_ENVIRONMENT", "development"),
             log_level=values.get("JOB_AGENT_LOG_LEVEL", "INFO").upper(),
-            database_path=_resolve_path(
-                values.get("JOB_AGENT_DATABASE_PATH", "data/job_agent.sqlite3"),
-                PROJECT_ROOT,
+            mysql_host=values.get("JOB_AGENT_MYSQL_HOST", "127.0.0.1").strip(),
+            mysql_port=int(values.get("JOB_AGENT_MYSQL_PORT", "3306")),
+            mysql_database=values.get("JOB_AGENT_MYSQL_DATABASE", "job_agent").strip(),
+            mysql_user=values.get("JOB_AGENT_MYSQL_USER", "job_agent").strip(),
+            mysql_password=values.get("JOB_AGENT_MYSQL_PASSWORD") or None,
+            mysql_connect_timeout=int(
+                values.get("JOB_AGENT_MYSQL_CONNECT_TIMEOUT", "10")
             ),
             candidate_profile_path=_resolve_path(
                 values.get("JOB_AGENT_CANDIDATE_PROFILE", "data/candidate_profile.json"),
@@ -161,6 +170,18 @@ class Settings:
         )
 
     def __post_init__(self) -> None:
+        if not self.mysql_host:
+            raise ValueError("JOB_AGENT_MYSQL_HOST must not be empty")
+        if not 1 <= self.mysql_port <= 65535:
+            raise ValueError("JOB_AGENT_MYSQL_PORT must be between 1 and 65535")
+        if not self.mysql_database:
+            raise ValueError("JOB_AGENT_MYSQL_DATABASE must not be empty")
+        if not self.mysql_user:
+            raise ValueError("JOB_AGENT_MYSQL_USER must not be empty")
+        if self.mysql_connect_timeout <= 0:
+            raise ValueError(
+                "JOB_AGENT_MYSQL_CONNECT_TIMEOUT must be greater than zero"
+            )
         if self.remote_country is not None and (
             len(self.remote_country) != 2 or not self.remote_country.isalpha()
         ):
@@ -193,6 +214,5 @@ class Settings:
             raise ValueError("JOB_AGENT_HTTP_TIMEOUT_SECONDS must be greater than zero")
 
     def prepare_directories(self) -> None:
-        self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.candidate_profile_path.parent.mkdir(parents=True, exist_ok=True)
         self.generated_documents_dir.mkdir(parents=True, exist_ok=True)

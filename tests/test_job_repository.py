@@ -1,26 +1,24 @@
-"""SQLite job-repository tests."""
+"""MySQL job-repository tests."""
 
 from __future__ import annotations
 
-import tempfile
 import unittest
 from dataclasses import replace
-from pathlib import Path
 
-from database import Database, initialize_schema
+from database import Database, MySQLConfig, initialize_schema
 from models import JobPosting
 from repositories import JobRepository
+from tests.mysql_fakes import FakeMySQLServer
 
 
 class JobRepositoryTests(unittest.TestCase):
     def setUp(self) -> None:
-        self._temporary_directory = tempfile.TemporaryDirectory()
-        database = Database(Path(self._temporary_directory.name) / "test.sqlite3")
+        database = Database(
+            MySQLConfig(),
+            connect_factory=FakeMySQLServer().connect,
+        )
         initialize_schema(database)
         self.repository = JobRepository(database)
-
-    def tearDown(self) -> None:
-        self._temporary_directory.cleanup()
 
     def test_saves_reads_and_updates_a_job(self) -> None:
         job = JobPosting(

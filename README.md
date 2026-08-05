@@ -21,9 +21,10 @@ Search → Normalize → Parse → Score → Review → Tailor → Apply → Tra
 
 ## Phase 1 Features
 
-- Dependency-free configuration and core runtime on Python 3.10+
+- Python 3.10+ configuration and core runtime
 - Validated dataclass models for candidates, jobs, matches, applications, and workflows
-- SQLite schema with candidate, job, application, and workflow tables
+- MySQL 8 schema with transactional candidate, job, application, and workflow tables
+- Native JSON columns for flexible entity payloads alongside indexed relational fields
 - Repository classes that isolate persistence from agents
 - Source-independent asynchronous search orchestration
 - In-memory job source for local development and tests
@@ -57,7 +58,7 @@ The knowledge layer includes:
 
 - `data/candidate_profile.json` as the single editable source for identity, preferences, and resume knowledge
 - JSON loading, validation, and atomic saving through `ResumeKnowledgeService`
-- SQLite persistence through `ResumeKnowledgeRepository`
+- MySQL persistence through `ResumeKnowledgeRepository`
 - Schema version 2 and an incremental resume-knowledge migration
 - Skill-specific years and industry alignment in match results
 - A cautious extraction prompt for a future resume-ingestion provider
@@ -68,7 +69,7 @@ Phase 2 does not extract a PDF automatically. Review and correct the structured 
 
 ## Phase 3: Job Search Agent
 
-The search agent discovers jobs by criteria rather than iterating over a list of target companies. It builds one query per role and location, requests enabled discovery providers concurrently, normalizes their results into `JobPosting`, enforces hard filters, deduplicates across providers, stores jobs in SQLite, and hands them to parsing and matching.
+The search agent discovers jobs by criteria rather than iterating over a list of target companies. It builds one query per role and location, requests enabled discovery providers concurrently, normalizes their results into `JobPosting`, enforces hard filters, deduplicates across providers, stores jobs in MySQL, and hands them to parsing and matching.
 
 Search criteria include:
 
@@ -305,7 +306,7 @@ When remote-only search is active, profile and CLI locations (and their radius) 
 
 Discovery source names are `adzuna`, `remotive`, `usajobs`, and `linkedin`. Supplemental names are `greenhouse`, `lever`, `workday`, and `career_page`. Omitting `--source` searches every enabled source.
 
-Results are normalized, filtered, deduplicated, scored, printed to the terminal, and stored in the configured SQLite database. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one source is configured.
+Results are normalized, filtered, deduplicated, scored, printed to the terminal, and stored in the configured MySQL database. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one source is configured.
 
 Live search and application submission are disabled by default:
 
@@ -322,13 +323,14 @@ Enabling a flag alone does not configure an external source, browser runtime, or
 .
 ├── app.py                         # Composition root
 ├── config.py                      # Environment settings
+├── docker-compose.yml            # Persistent MySQL development service
 ├── pyproject.toml                 # Packaging and optional dependencies
 ├── .env.example                   # Safe configuration template
 ├── agents/                        # Single-responsibility pipeline agents
 ├── models/                        # Shared domain and resume-knowledge models
 ├── services/                      # External capability boundaries
 ├── workflows/                     # Pipeline orchestration
-├── repositories/                  # Persistence interfaces and SQLite implementations
+├── repositories/                  # Persistence interfaces and MySQL implementations
 ├── database/                      # Connection, schema, and migration files
 ├── prompts/                       # Reusable LLM prompt templates
 ├── browser/                       # Guarded form planning and platform adapters
@@ -348,7 +350,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-The local models, storage, and tests have no third-party runtime dependencies. Install the project in editable mode if desired:
+Install the project and MySQL Connector/Python in editable mode:
 
 ```bash
 python3 -m pip install -e .
@@ -364,13 +366,57 @@ cp .env.example .env
 - Unified candidate profile and resume knowledge: `data/candidate_profile.json`
 - Sample job: `data/sample_jobs/sample_job.json`
 
-Initialize the SQLite database and application container:
+### Configure MySQL
+
+MySQL 8.4 is recommended. The included Docker Compose service runs MySQL in the background, restarts it unless explicitly stopped, and persists its data in the `job-agent-mysql-data` named volume.
+
+Configure distinct application and root passwords in `.env`:
+
+```env
+JOB_AGENT_MYSQL_HOST=127.0.0.1
+JOB_AGENT_MYSQL_PORT=3306
+JOB_AGENT_MYSQL_DATABASE=job_agent
+JOB_AGENT_MYSQL_USER=job_agent
+JOB_AGENT_MYSQL_PASSWORD=replace-with-a-strong-password
+JOB_AGENT_MYSQL_ROOT_PASSWORD=replace-with-a-different-strong-password
+JOB_AGENT_MYSQL_CONNECT_TIMEOUT=10
+```
+
+Start MySQL as a detached background service and check its health:
+
+```bash
+docker compose -f docker-compose.yml up --detach mysql
+docker compose -f docker-compose.yml ps mysql
+```
+
+The service remains running after tests and across Docker restarts. Stop it explicitly with `docker compose -f docker-compose.yml stop mysql`; start it again with `docker compose -f docker-compose.yml start mysql`. `docker compose -f docker-compose.yml down` removes the container and network but retains the named database volume unless `--volumes` is also specified.
+
+MySQL's initialization variables are applied only when the named volume is first created. Changing either password in `.env` later does not change an existing database account; update the account inside MySQL or deliberately create a new development volume.
+
+To use an existing MySQL server instead of Docker, create the database and application account manually. Run the following statements as a MySQL administrator, replacing the example password and host as needed:
+
+```sql
+CREATE DATABASE job_agent
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_0900_ai_ci;
+
+CREATE USER 'job_agent'@'127.0.0.1'
+    IDENTIFIED BY 'replace-with-a-strong-password';
+
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES
+    ON job_agent.*
+    TO 'job_agent'@'127.0.0.1';
+```
+
+The Docker-only root password setting is unnecessary when using an existing server. The committed `.env.example` contains placeholders only, while `.env` is ignored by Git. Use a deployment secret manager instead of a file in hosted environments. The application never includes the application password in its startup log or the `MySQLConfig` representation.
+
+The configured database must already exist. On startup, the application creates missing tables and records the current schema version:
 
 ```bash
 python3 app.py
 ```
 
-By default this creates `data/job_agent.sqlite3`, which is ignored by Git.
+Existing SQLite files are not read or migrated automatically. Export any data that must be retained and import it into MySQL before removing an old database file.
 
 ## Tests
 
@@ -388,7 +434,7 @@ To run Python's built-in test discovery directly with verbose console output, us
 python3 -m unittest discover -s ./tests -p 'test_*.py' -v
 ```
 
-The suite covers resume knowledge, parsing, matching, SQLite persistence, the search safety flag, and fixture-based normalization for every Phase 3 source without making network requests.
+The suite covers resume knowledge, parsing, matching, MySQL repository behavior, the search safety flag, and fixture-based normalization for every Phase 3 source without making network or live-database requests. Repository tests use an injected in-memory MySQL connector fake; use a separate integration environment to validate credentials and server permissions.
 
 ## Optional API
 

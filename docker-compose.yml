@@ -1,0 +1,30 @@
+name: job-agent
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: job-agent-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${JOB_AGENT_MYSQL_DATABASE:-job_agent}
+      MYSQL_USER: ${JOB_AGENT_MYSQL_USER:-job_agent}
+      MYSQL_PASSWORD: ${JOB_AGENT_MYSQL_PASSWORD:?Set JOB_AGENT_MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${JOB_AGENT_MYSQL_ROOT_PASSWORD:?Set JOB_AGENT_MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_ROOT_HOST: '%'
+    ports:
+      - "127.0.0.1:${JOB_AGENT_MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping --host=127.0.0.1 --user=root --password="$${MYSQL_ROOT_PASSWORD}" --silent
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 30s
+
+volumes:
+  mysql_data:
+    name: job-agent-mysql-data

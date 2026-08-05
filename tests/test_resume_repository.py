@@ -1,21 +1,22 @@
-"""SQLite resume-knowledge repository tests."""
+"""MySQL resume-knowledge repository tests."""
 
 from __future__ import annotations
 
-import tempfile
 import unittest
 from dataclasses import replace
-from pathlib import Path
 
-from database import Database, initialize_schema
+from database import Database, MySQLConfig, initialize_schema
 from models import CandidateProfile, ResumeKnowledgeBase
 from repositories import CandidateRepository, ResumeKnowledgeRepository
+from tests.mysql_fakes import FakeMySQLServer
 
 
 class ResumeKnowledgeRepositoryTests(unittest.TestCase):
     def setUp(self) -> None:
-        self._temporary_directory = tempfile.TemporaryDirectory()
-        database = Database(Path(self._temporary_directory.name) / "test.sqlite3")
+        database = Database(
+            MySQLConfig(),
+            connect_factory=FakeMySQLServer().connect,
+        )
         initialize_schema(database)
         CandidateRepository(database).save(
             CandidateProfile(
@@ -25,9 +26,6 @@ class ResumeKnowledgeRepositoryTests(unittest.TestCase):
             )
         )
         self.repository = ResumeKnowledgeRepository(database)
-
-    def tearDown(self) -> None:
-        self._temporary_directory.cleanup()
 
     def test_saves_updates_reads_and_deletes_knowledge(self) -> None:
         knowledge = ResumeKnowledgeBase(

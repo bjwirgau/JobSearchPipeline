@@ -19,5 +19,11 @@ def to_iso(value: datetime | None) -> str | None:
     return ensure_utc(value).isoformat() if value else None
 
 
+def to_utc_naive(value: datetime) -> datetime:
+    """Convert a timestamp for storage in a UTC MySQL DATETIME column."""
+
+    return ensure_utc(value).replace(tzinfo=None)
+
+
 def from_iso(value: str | None) -> datetime | None:
     return ensure_utc(datetime.fromisoformat(value)) if value else None
