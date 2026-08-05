@@ -66,7 +66,7 @@ class LinkedInJobSource:
         actor_limit = min(limit, MAX_JOBS_PER_RUN)
         response = await self._http.post_json(
             self._run_url(actor_limit),
-            self._actor_input(query, actor_limit),
+            self.build_actor_input(query, actor_limit),
             headers={
                 "Accept": "application/json",
                 "Authorization": f"Bearer {self._config.api_token}",
@@ -157,7 +157,10 @@ class LinkedInJobSource:
         )
 
     @staticmethod
-    def _actor_input(query: SearchQuery, limit: int) -> dict[str, object]:
+    def build_actor_input(query: SearchQuery, limit: int) -> dict[str, object]:
+        """Build the exact JSON input used for a LinkedIn Actor run."""
+
+        limit = min(limit, MAX_JOBS_PER_RUN)
         required_terms = " ".join(query.required_keywords)
         search_query = " ".join(
             value for value in (query.title or query.text, required_terms) if value

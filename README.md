@@ -266,6 +266,20 @@ Run every enabled provider using the desired titles, locations, and resume knowl
 python3 app.py --search
 ```
 
+Preview the exact Actor input without requiring an Apify token or sending any request:
+
+```bash
+python3 app.py --search \
+  --source linkedin \
+  --dry-run \
+  --title "AI Engineer" \
+  --remote \
+  --remote-country us \
+  --limit 25
+```
+
+Dry-run output includes the configured Actor ID and each JSON query that a live LinkedIn search would submit. It exits before source selection, network access, and job storage. The flag supports only the `linkedin` source; when `--source` is omitted, LinkedIn is implied for the preview.
+
 Override the profile defaults and add explicit hard filters with CLI options:
 
 ```bash

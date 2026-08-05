@@ -318,7 +318,7 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(LinkedInWorkplaceType.HYBRID.value, "3")
 
     def test_linkedin_remote_input_omits_city_without_country_scope(self) -> None:
-        payload = LinkedInJobSource._actor_input(
+        payload = LinkedInJobSource.build_actor_input(
             replace(self.query, remote_country=None),
             limit=10,
         )

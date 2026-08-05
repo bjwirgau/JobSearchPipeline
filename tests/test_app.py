@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import io
 import unittest
+from contextlib import redirect_stderr
 
 from app import (
     _arguments,
+    _format_apify_dry_run,
     _format_job_grid,
     _format_searched_sources,
     _search_criteria,
@@ -53,6 +56,48 @@ class ApplicationCriteriaTests(unittest.TestCase):
 
         self.assertEqual(arguments.remote_country, "ca")
         self.assertEqual(criteria.remote_country, "ca")
+
+    def test_apify_dry_run_prints_actor_input(self) -> None:
+        arguments = _arguments(
+            [
+                "--search",
+                "--dry-run",
+                "--source",
+                "linkedin",
+                "--requirement",
+                "AWS",
+                "--limit",
+                "10",
+            ],
+            settings=self.settings,
+        )
+        criteria = _search_criteria(arguments, self.candidate, self.knowledge)
+
+        output = _format_apify_dry_run(
+            criteria,
+            actor_id="automation-lab/linkedin-jobs-scraper",
+        )
+
+        self.assertTrue(arguments.dry_run)
+        self.assertIn("Apify dry run: no requests sent.", output)
+        self.assertIn("Queries: 1", output)
+        self.assertIn('"searchQuery": "Software Engineer AWS"', output)
+        self.assertIn('"maxJobs": 10', output)
+        self.assertIn('"workplaceType": "2"', output)
+        self.assertNotIn("api-token", output)
+
+    def test_apify_dry_run_rejects_non_linkedin_sources(self) -> None:
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            _arguments(
+                ["--search", "--dry-run", "--source", "remotive"],
+                settings=self.settings,
+            )
+
+        self.assertIn(
+            "--dry-run supports only the linkedin source",
+            errors.getvalue(),
+        )
 
     def test_search_results_render_as_a_named_column_grid(self) -> None:
         job = JobPosting(

@@ -17,6 +17,7 @@ from agents import (
     MatchingAgent,
     ParserAgent,
     SearchAgent,
+    SearchQueryBuilder,
     TailoringAgent,
     ValidationAgent,
 )
@@ -42,6 +43,7 @@ from services import (
     ResumeKnowledgeService,
     build_job_sources,
 )
+from services.job_sources import LinkedInJobSource
 from utils.logging import configure_logging
 from workflows import ApplicationWorkflow, JobSearchWorkflow
 
@@ -133,6 +135,11 @@ def _arguments(
 ) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Review-first job search pipeline")
     parser.add_argument("--search", action="store_true", help="run configured job sources")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print Apify Actor inputs without sending requests",
+    )
     parser.add_argument("--title", action="append", default=[], help="desired job title")
     parser.add_argument("--skill", action="append", default=[], help="search skill")
     parser.add_argument(
@@ -174,7 +181,17 @@ def _arguments(
         help="oldest accepted posting in days",
     )
     parser.add_argument("--limit", type=int, default=25, help="results per source query")
-    return parser.parse_args(argv)
+    arguments = parser.parse_args(argv)
+    if arguments.dry_run and not arguments.search:
+        parser.error("--dry-run requires --search")
+    unsupported_dry_run_sources = tuple(
+        source
+        for source in arguments.source
+        if source.strip().casefold() != "linkedin"
+    )
+    if arguments.dry_run and unsupported_dry_run_sources:
+        parser.error("--dry-run supports only the linkedin source")
+    return arguments
 
 
 def _load_candidate(path: Path) -> CandidateProfile:
@@ -287,6 +304,40 @@ def _format_searched_sources(source_names: Sequence[str]) -> str:
     return f"Searching sources ({len(source_names)}): {names}"
 
 
+def _format_apify_dry_run(criteria: SearchCriteria, *, actor_id: str) -> str:
+    queries = SearchQueryBuilder().build(criteria)
+    lines = [
+        "Apify dry run: no requests sent.",
+        f"Actor: {actor_id}",
+        f"Queries: {len(queries)}",
+    ]
+    for index, query in enumerate(queries, 1):
+        payload = LinkedInJobSource.build_actor_input(
+            query,
+            criteria.results_per_query,
+        )
+        lines.extend(
+            (
+                f"Query {index}/{len(queries)}:",
+                json.dumps(payload, indent=2, ensure_ascii=False),
+            )
+        )
+    return "\n".join(lines)
+
+
+def _run_apify_dry_run(settings: Settings, arguments: argparse.Namespace) -> int:
+    candidate = _load_candidate(settings.candidate_profile_path)
+    knowledge = ResumeKnowledgeService(settings.candidate_profile_path).load()
+    criteria = _search_criteria(arguments, candidate, knowledge)
+    print(
+        _format_apify_dry_run(
+            criteria,
+            actor_id=settings.apify_linkedin_actor_id,
+        )
+    )
+    return 0
+
+
 async def _run_search(
     container: ApplicationContainer,
     arguments: argparse.Namespace,
@@ -327,6 +378,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     settings = Settings.from_env()
     arguments = _arguments(argv, settings=settings)
     configure_logging(settings.log_level)
+    if arguments.search and arguments.dry_run:
+        return _run_apify_dry_run(settings, arguments)
     container = build_container(settings)
     logging.getLogger(__name__).info(
         "Job Agent Phase 3 initialized (search=%s, submission=%s, database=%s)",
