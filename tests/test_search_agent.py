@@ -81,6 +81,24 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(query.excluded_keywords, ("intern",))
         self.assertEqual(query.max_age_days, 14)
 
+    async def test_query_builder_omits_locations_for_remote_searches(self) -> None:
+        queries = SearchQueryBuilder().build(
+            SearchCriteria(
+                job_titles=("Software Engineer", "Backend Engineer"),
+                locations=("Denver, CO", "Austin, TX"),
+                location_radius_miles=50,
+                remote_only=True,
+                remote_country="us",
+            )
+        )
+
+        self.assertEqual(len(queries), 2)
+        self.assertTrue(all(query.remote_only for query in queries))
+        self.assertTrue(all(query.location is None for query in queries))
+        self.assertTrue(
+            all(query.location_radius_miles is None for query in queries)
+        )
+
     async def test_required_keywords_are_hard_filters_after_source_search(self) -> None:
         jobs = (
             JobPosting(

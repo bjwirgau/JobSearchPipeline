@@ -286,6 +286,8 @@ python3 app.py --search \
 
 Repeat `--title`, `--requirement`, `--location`, `--employment-type`, or `--exclude` to provide multiple values. Add `--remote` to require an explicitly remote job. Required keywords are pushed to providers that support them and are checked again after normalization.
 
+When remote-only search is active, profile and CLI locations (and their radius) are omitted from source queries. If `JOB_AGENT_REMOTE_COUNTRY` or `--remote-country` is configured, providers may still receive that country as the remote eligibility scope; otherwise LinkedIn's Apify request omits `location` entirely.
+
 Discovery source names are `adzuna`, `remotive`, `usajobs`, and `linkedin`. Supplemental names are `greenhouse`, `lever`, `workday`, and `career_page`. Omitting `--source` searches every enabled source.
 
 Results are normalized, filtered, deduplicated, scored, printed to the terminal, and stored in the configured SQLite database. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one source is configured.

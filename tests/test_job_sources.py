@@ -317,6 +317,18 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(LinkedInWorkplaceType.REMOTE.value, "2")
         self.assertEqual(LinkedInWorkplaceType.HYBRID.value, "3")
 
+    def test_linkedin_remote_input_omits_city_without_country_scope(self) -> None:
+        payload = LinkedInJobSource._actor_input(
+            replace(self.query, remote_country=None),
+            limit=10,
+        )
+
+        self.assertNotIn("location", payload)
+        self.assertEqual(
+            payload["workplaceType"],
+            LinkedInWorkplaceType.REMOTE.value,
+        )
+
     def test_source_factory_builds_only_configured_sources(self) -> None:
         settings = Settings.from_env(
             {

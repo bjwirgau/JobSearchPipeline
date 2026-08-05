@@ -35,7 +35,11 @@ class NoJobSourcesError(ValueError):
 class SearchQueryBuilder:
     def build(self, criteria: SearchCriteria) -> tuple[SearchQuery, ...]:
         titles: tuple[str | None, ...] = criteria.job_titles or (None,)
-        locations: tuple[str | None, ...] = criteria.locations or (None,)
+        locations: tuple[str | None, ...] = (
+            (None,)
+            if criteria.remote_only
+            else criteria.locations or (None,)
+        )
         queries: list[SearchQuery] = []
         seen: set[tuple[str, str, bool]] = set()
         for title in titles:
@@ -51,7 +55,11 @@ class SearchQueryBuilder:
                     skills=criteria.skills,
                     required_keywords=criteria.required_keywords,
                     location=location,
-                    location_radius_miles=criteria.location_radius_miles,
+                    location_radius_miles=(
+                        None
+                        if criteria.remote_only
+                        else criteria.location_radius_miles
+                    ),
                     remote_only=criteria.remote_only,
                     remote_country=criteria.remote_country,
                     employment_types=criteria.employment_types,

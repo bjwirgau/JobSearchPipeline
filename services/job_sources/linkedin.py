@@ -168,11 +168,13 @@ class LinkedInJobSource:
             "scrapeJobDetails": True,
             "sortBy": "DD",
         }
-        location = query.location or _country_name(query.remote_country)
+        location = (
+            _country_name(query.remote_country)
+            if query.remote_only
+            else query.location
+        )
         if location:
             payload["location"] = location
-        elif query.remote_only:
-            payload["location"] = "Remote"
         if query.remote_only:
             payload["workplaceType"] = LinkedInWorkplaceType.REMOTE.value
         if len(query.employment_types) == 1:
