@@ -123,6 +123,15 @@ search and updated to a score between `0` and `1` after the scoring stage.
 Candidate identity and preferences remain in `data/candidate_profile.json`;
 application records are not persisted in the current schema.
 
+Greenhouse company discovery is stored separately in `company_prospects` with
+`company_id`, `company_name`, `board_token`, `company_url`, `created_at`, and
+`updated_at`. The company URL is the canonical public Greenhouse board URL.
+
+Page-level crawl history is stored in `crawl_pages`. Each row records the page
+URL, source, page type, last outcome, last and next crawl times, and the most
+recent error. This includes failed board URLs that never become company
+prospects.
+
 ### Enable and Configure Job Searching
 
 #### 1. Install the HTTP search dependencies
@@ -202,6 +211,62 @@ The board token is the path segment in `https://boards.greenhouse.io/{board_toke
 ```env
 JOB_AGENT_GREENHOUSE_BOARDS=Company One=companyone;Company Two=companytwo
 ```
+
+##### Crawl for Greenhouse companies
+
+The company crawler queries the Internet Archive CDX index for public US and EU
+Greenhouse board URLs. If that public index is unavailable, discovery falls
+back to the latest Common Crawl URL index. It extracts and deduplicates board
+tokens, then validates each candidate through Greenhouse's public Job Board
+API. Greenhouse returns the organization name for a valid board; the crawler
+then inserts or updates that company in `company_prospects`.
+
+The crawler is disabled by default. Enable it in `.env`:
+
+```env
+JOB_AGENT_COMPANY_CRAWLER_ENABLED=true
+JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT=5000
+JOB_AGENT_COMPANY_CRAWLER_CONCURRENCY=5
+JOB_AGENT_COMPANY_CRAWLER_REQUEST_DELAY_SECONDS=1
+JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS=168
+```
+
+Run one crawl with:
+
+```bash
+python3 app.py --crawl-greenhouse-companies --crawl-limit 100
+```
+
+`JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT` is the maximum number of URL-index
+records inspected per supported Greenhouse hostname. `--crawl-limit` caps the
+number of unique boards validated in one run. Previously unseen boards are
+validated first, allowing repeated runs to progress through the discovery set.
+The terminal output summarizes discovered, checked, inserted, updated, and
+failed boards and prints every successfully validated company in a grid.
+
+`JOB_AGENT_COMPANY_CRAWLER_REQUEST_DELAY_SECONDS` sets the minimum idle interval
+between every outbound crawler request. The interval applies globally to archive
+discovery, retries, Common Crawl fallback, and individual Greenhouse board API
+checks. Requests are serialized even though board-validation tasks may be queued
+concurrently. The default is one second; increase it if a gateway starts
+rejecting requests.
+
+`JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS` controls when a previously
+checked board becomes eligible again. The default `168` is seven days. Both
+successful and failed checks are recorded, so rerunning the command during the
+cooldown skips those board API calls. Once `next_crawl_at` is reached, the board
+can be checked and its company data refreshed again. Archive indexes are still
+polled each run because that small discovery step is required to find newly
+listed board URLs.
+
+The crawler reads URL indexes only; it does not download archived page content.
+CDX requests are sequential and delayed because public indexes are rate-limited.
+Archive requests use the smallest CDX page size and retry once after an HTTP
+failure; failure on one hostname does not discard candidates from other hosts.
+Keep the delay enabled, avoid concurrent crawler runs, and use Common Crawl's
+bulk URL Index instead if this grows into a large-scale data collection
+workload. Archive indexes can be incomplete or stale, so every token is verified
+against Greenhouse before it is persisted.
 
 ##### Lever
 

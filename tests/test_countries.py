@@ -49,6 +49,31 @@ class CountryEligibilityTests(unittest.TestCase):
         self.assertEqual(settings.mysql_connect_timeout, 4)
         self.assertNotIn("secret", repr(settings))
 
+    def test_company_crawler_settings_are_validated(self) -> None:
+        settings = Settings.from_env(
+            {
+                "JOB_AGENT_COMPANY_CRAWLER_ENABLED": "true",
+                "JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT": "7500",
+                "JOB_AGENT_COMPANY_CRAWLER_CONCURRENCY": "4",
+                "JOB_AGENT_COMPANY_CRAWLER_REQUEST_DELAY_SECONDS": "2.5",
+                "JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS": "72",
+            }
+        )
+
+        self.assertTrue(settings.company_crawler_enabled)
+        self.assertEqual(settings.company_crawler_scan_limit, 7500)
+        self.assertEqual(settings.company_crawler_concurrency, 4)
+        self.assertEqual(settings.company_crawler_request_delay_seconds, 2.5)
+        self.assertEqual(settings.company_crawler_revisit_interval_hours, 72)
+        with self.assertRaisesRegex(ValueError, "between 1 and 20"):
+            Settings.from_env(
+                {"JOB_AGENT_COMPANY_CRAWLER_CONCURRENCY": "21"}
+            )
+        with self.assertRaisesRegex(ValueError, "REVISIT_INTERVAL_HOURS"):
+            Settings.from_env(
+                {"JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS": "0"}
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

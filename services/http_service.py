@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
 from urllib.parse import urlsplit
@@ -49,6 +51,66 @@ class HttpClient(Protocol):
         headers: Mapping[str, str] | None = None,
     ) -> HttpResponse:
         """Perform an HTTP POST with a JSON request body."""
+
+
+class ThrottledHttpClient:
+    """Serialize requests and leave a minimum idle interval between them."""
+
+    def __init__(
+        self,
+        *,
+        http: HttpClient,
+        interval_seconds: float,
+        sleep_func: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        if not 0 <= interval_seconds <= 60:
+            raise ValueError("HTTP request interval must be between 0 and 60 seconds")
+        self._http = http
+        self._interval_seconds = interval_seconds
+        self._sleep = sleep_func
+        self._clock = clock
+        self._lock = asyncio.Lock()
+        self._last_request_finished_at: float | None = None
+
+    async def get(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, object] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> HttpResponse:
+        return await self._throttle(
+            lambda: self._http.get(url, params=params, headers=headers)
+        )
+
+    async def post_json(
+        self,
+        url: str,
+        payload: Mapping[str, object],
+        *,
+        headers: Mapping[str, str] | None = None,
+    ) -> HttpResponse:
+        return await self._throttle(
+            lambda: self._http.post_json(url, payload, headers=headers)
+        )
+
+    async def _throttle(
+        self,
+        request: Callable[[], Awaitable[HttpResponse]],
+    ) -> HttpResponse:
+        if self._interval_seconds == 0:
+            return await request()
+        async with self._lock:
+            if self._last_request_finished_at is not None:
+                elapsed = self._clock() - self._last_request_finished_at
+                remaining = self._interval_seconds - elapsed
+                if remaining > 0:
+                    await self._sleep(remaining)
+            try:
+                return await request()
+            finally:
+                self._last_request_finished_at = self._clock()
 
 
 class RequestsHttpClient:

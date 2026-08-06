@@ -79,6 +79,11 @@ class Settings:
     candidate_profile_path: Path = PROJECT_ROOT / "data" / "candidate_profile.json"
     generated_documents_dir: Path = PROJECT_ROOT / "data" / "generated_documents"
     search_enabled: bool = False
+    company_crawler_enabled: bool = False
+    company_crawler_scan_limit: int = 5_000
+    company_crawler_concurrency: int = 5
+    company_crawler_request_delay_seconds: float = 1.0
+    company_crawler_revisit_interval_hours: float = 168.0
     remote_country: str | None = None
     adzuna_app_id: str | None = None
     adzuna_app_key: str | None = None
@@ -128,6 +133,27 @@ class Settings:
                 PROJECT_ROOT,
             ),
             search_enabled=_as_bool(values.get("JOB_AGENT_SEARCH_ENABLED")),
+            company_crawler_enabled=_as_bool(
+                values.get("JOB_AGENT_COMPANY_CRAWLER_ENABLED")
+            ),
+            company_crawler_scan_limit=int(
+                values.get("JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT", "5000")
+            ),
+            company_crawler_concurrency=int(
+                values.get("JOB_AGENT_COMPANY_CRAWLER_CONCURRENCY", "5")
+            ),
+            company_crawler_request_delay_seconds=float(
+                values.get(
+                    "JOB_AGENT_COMPANY_CRAWLER_REQUEST_DELAY_SECONDS",
+                    "1",
+                )
+            ),
+            company_crawler_revisit_interval_hours=float(
+                values.get(
+                    "JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS",
+                    "168",
+                )
+            ),
             remote_country=(
                 values.get("JOB_AGENT_REMOTE_COUNTRY", "").strip().casefold() or None
             ),
@@ -177,6 +203,24 @@ class Settings:
         if self.mysql_connect_timeout <= 0:
             raise ValueError(
                 "JOB_AGENT_MYSQL_CONNECT_TIMEOUT must be greater than zero"
+            )
+        if not 1 <= self.company_crawler_scan_limit <= 100_000:
+            raise ValueError(
+                "JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT must be between 1 and 100000"
+            )
+        if not 1 <= self.company_crawler_concurrency <= 20:
+            raise ValueError(
+                "JOB_AGENT_COMPANY_CRAWLER_CONCURRENCY must be between 1 and 20"
+            )
+        if not 0 <= self.company_crawler_request_delay_seconds <= 60:
+            raise ValueError(
+                "JOB_AGENT_COMPANY_CRAWLER_REQUEST_DELAY_SECONDS must be "
+                "between 0 and 60"
+            )
+        if not 0 < self.company_crawler_revisit_interval_hours <= 8_760:
+            raise ValueError(
+                "JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS must be "
+                "greater than 0 and at most 8760"
             )
         if self.remote_country is not None and (
             len(self.remote_country) != 2 or not self.remote_country.isalpha()

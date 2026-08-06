@@ -2,7 +2,19 @@
 
 from .document_service import DocumentService
 from .embedding_service import EmbeddingService
-from .http_service import HttpClient, HttpResponse, RequestsHttpClient
+from .greenhouse_company_discovery import (
+    CommonCrawlGreenhouseDiscovery,
+    CompanyDiscoveryError,
+    GreenhouseBoardCandidate,
+    GreenhouseCdxDiscovery,
+    GreenhousePublicBoardLookup,
+)
+from .http_service import (
+    HttpClient,
+    HttpResponse,
+    RequestsHttpClient,
+    ThrottledHttpClient,
+)
 from .job_normalization_service import JobNormalizer
 from .job_source_factory import build_job_sources
 from .job_source_service import InMemoryJobSource, JobSourceService
@@ -11,8 +23,13 @@ from .notification_service import LoggingNotificationService, NotificationServic
 from .resume_knowledge_service import ResumeKnowledgeError, ResumeKnowledgeService
 
 __all__ = [
+    "CommonCrawlGreenhouseDiscovery",
+    "CompanyDiscoveryError",
     "DocumentService",
     "EmbeddingService",
+    "GreenhouseBoardCandidate",
+    "GreenhouseCdxDiscovery",
+    "GreenhousePublicBoardLookup",
     "HttpClient",
     "HttpResponse",
     "InMemoryJobSource",
@@ -24,5 +41,6 @@ __all__ = [
     "ResumeKnowledgeError",
     "ResumeKnowledgeService",
     "RequestsHttpClient",
+    "ThrottledHttpClient",
     "build_job_sources",
 ]

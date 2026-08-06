@@ -7,6 +7,8 @@ from .application import (
     DocumentArtifact,
 )
 from .candidate import CandidateProfile
+from .company_prospect import CompanyProspect
+from .crawl_page import CrawlPage, CrawlPageType, CrawlStatus
 from .job import (
     JobPosting,
     SearchCriteria,
@@ -24,6 +26,10 @@ __all__ = [
     "ApplicationStatus",
     "ApplicationValidation",
     "CandidateProfile",
+    "CompanyProspect",
+    "CrawlPage",
+    "CrawlPageType",
+    "CrawlStatus",
     "DocumentArtifact",
     "JobPosting",
     "JobProspect",

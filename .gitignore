@@ -7,5 +7,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 /test-results/
+/logs/
 data/generated_documents/*
 !data/generated_documents/.gitkeep

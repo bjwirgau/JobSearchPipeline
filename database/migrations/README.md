@@ -7,3 +7,5 @@ The complete MySQL schema for new databases is defined in `database/schema.py`. 
   the focused job-prospect projection.
 - `004_job_prospect_timestamps.sql` adds database-managed creation and update
   timestamps to job prospects.
+- `005_company_prospects.sql` adds Greenhouse company discovery persistence.
+- `006_crawl_pages.sql` adds page-level crawl history and revisit eligibility.

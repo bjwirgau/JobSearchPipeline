@@ -9,6 +9,7 @@ from contextlib import redirect_stderr
 from app import (
     _arguments,
     _format_apify_dry_run,
+    _format_company_grid,
     _format_job_grid,
     _format_searched_sources,
     _search_criteria,
@@ -16,6 +17,7 @@ from app import (
 from config import Settings
 from models import (
     CandidateProfile,
+    CompanyProspect,
     JobPosting,
     MatchBreakdown,
     MatchResult,
@@ -146,6 +148,39 @@ class ApplicationCriteriaTests(unittest.TestCase):
             output,
             "Searching sources (3): adzuna, remotive, usajobs",
         )
+
+    def test_company_crawler_command_is_separate_from_job_search(self) -> None:
+        arguments = _arguments(
+            ["--crawl-greenhouse-companies", "--crawl-limit", "50"],
+            settings=self.settings,
+        )
+
+        self.assertTrue(arguments.crawl_greenhouse_companies)
+        self.assertEqual(arguments.crawl_limit, 50)
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            _arguments(
+                ["--search", "--crawl-greenhouse-companies"],
+                settings=self.settings,
+            )
+        self.assertIn("cannot be combined with --search", errors.getvalue())
+
+    def test_company_crawler_results_render_as_a_named_grid(self) -> None:
+        grid = _format_company_grid(
+            (
+                CompanyProspect.from_board(
+                    company_name="Example Company",
+                    board_token="example",
+                    company_url="https://job-boards.greenhouse.io/example",
+                ),
+            )
+        )
+
+        self.assertIn("Company", grid)
+        self.assertIn("Board token", grid)
+        self.assertIn("Company URL", grid)
+        self.assertIn("Example Company", grid)
+        self.assertEqual(len({len(line) for line in grid.splitlines()}), 1)
 
 
 if __name__ == "__main__":

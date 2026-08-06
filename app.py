@@ -8,10 +8,13 @@ import json
 import logging
 import textwrap
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Sequence
 
 from agents import (
+    CompanyCrawlerDisabledError,
+    GreenhouseCompanyCrawler,
     MatchingAgent,
     ParserAgent,
     SearchAgent,
@@ -21,21 +24,30 @@ from config import Settings
 from database import Database, MySQLConfig, initialize_schema
 from models import (
     CandidateProfile,
+    CompanyProspect,
     JobPosting,
     MatchResult,
     ResumeKnowledgeBase,
     SearchCriteria,
 )
 from repositories import (
+    CompanyProspectRepository,
+    CrawlPageRepository,
     JobProspectRepository,
     ResumeKnowledgeRepository,
 )
 from services import (
+    CompanyDiscoveryError,
+    GreenhouseCdxDiscovery,
+    GreenhousePublicBoardLookup,
     LoggingNotificationService,
+    RequestsHttpClient,
     ResumeKnowledgeError,
     ResumeKnowledgeService,
+    ThrottledHttpClient,
     build_job_sources,
 )
+from services.http_service import HttpRequestError
 from services.job_sources import LinkedInJobSource
 from utils.logging import configure_logging
 from workflows import JobSearchWorkflow
@@ -45,6 +57,9 @@ from workflows import JobSearchWorkflow
 class JobAgentContainer:
     settings: Settings
     database: Database
+    company_prospects: CompanyProspectRepository
+    crawl_pages: CrawlPageRepository
+    company_crawler: GreenhouseCompanyCrawler
     job_prospects: JobProspectRepository
     resume_knowledge: ResumeKnowledgeRepository
     resume_knowledge_service: ResumeKnowledgeService
@@ -66,10 +81,34 @@ def build_container(settings: Settings | None = None) -> JobAgentContainer:
     )
     initialize_schema(database)
 
+    company_prospects = CompanyProspectRepository(database)
+    crawl_pages = CrawlPageRepository(database)
     job_prospects = JobProspectRepository(database)
     resume_knowledge = ResumeKnowledgeRepository(database)
     resume_knowledge_service = ResumeKnowledgeService(settings.candidate_profile_path)
     notifications = LoggingNotificationService()
+    crawler_http = ThrottledHttpClient(
+        http=RequestsHttpClient(
+            timeout_seconds=settings.http_timeout_seconds,
+            user_agent=settings.http_user_agent,
+        ),
+        interval_seconds=settings.company_crawler_request_delay_seconds,
+    )
+    company_crawler = GreenhouseCompanyCrawler(
+        discovery=GreenhouseCdxDiscovery(
+            http=crawler_http,
+            scan_limit=settings.company_crawler_scan_limit,
+            request_delay_seconds=0,
+        ),
+        boards=GreenhousePublicBoardLookup(http=crawler_http),
+        repository=company_prospects,
+        crawl_pages=crawl_pages,
+        enabled=settings.company_crawler_enabled,
+        concurrency=settings.company_crawler_concurrency,
+        revisit_after=timedelta(
+            hours=settings.company_crawler_revisit_interval_hours
+        ),
+    )
 
     try:
         skill_vocabulary = resume_knowledge_service.load().all_skills
@@ -94,6 +133,9 @@ def build_container(settings: Settings | None = None) -> JobAgentContainer:
     return JobAgentContainer(
         settings=settings,
         database=database,
+        company_prospects=company_prospects,
+        crawl_pages=crawl_pages,
+        company_crawler=company_crawler,
         job_prospects=job_prospects,
         resume_knowledge=resume_knowledge,
         resume_knowledge_service=resume_knowledge_service,
@@ -113,6 +155,17 @@ def _arguments(
 ) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Review-first job search pipeline")
     parser.add_argument("--search", action="store_true", help="run configured job sources")
+    parser.add_argument(
+        "--crawl-greenhouse-companies",
+        action="store_true",
+        help="discover and persist companies with public Greenhouse boards",
+    )
+    parser.add_argument(
+        "--crawl-limit",
+        type=int,
+        default=100,
+        help="maximum Greenhouse boards to validate during one crawl",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -160,6 +213,8 @@ def _arguments(
     )
     parser.add_argument("--limit", type=int, default=25, help="results per source query")
     arguments = parser.parse_args(argv)
+    if arguments.crawl_greenhouse_companies and arguments.search:
+        parser.error("--crawl-greenhouse-companies cannot be combined with --search")
     if arguments.dry_run and not arguments.search:
         parser.error("--dry-run requires --search")
     unsupported_dry_run_sources = tuple(
@@ -227,6 +282,32 @@ def _format_job_grid(
         )
         for index, (job, match) in enumerate(ranked, 1)
     ]
+    return _format_grid(columns, rows)
+
+
+def _format_company_grid(companies: Sequence[CompanyProspect]) -> str:
+    columns = (
+        ("#", 3),
+        ("Company", 36),
+        ("Board token", 28),
+        ("Company URL", 64),
+    )
+    rows = [
+        (
+            str(index),
+            company.company_name,
+            company.board_token,
+            company.company_url,
+        )
+        for index, company in enumerate(companies, 1)
+    ]
+    return _format_grid(columns, rows)
+
+
+def _format_grid(
+    columns: Sequence[tuple[str, int]],
+    rows: Sequence[Sequence[str]],
+) -> str:
     widths = tuple(
         min(
             maximum,
@@ -352,6 +433,40 @@ async def _run_search(
     return 0 if ranked or not result.search.failures else 1
 
 
+async def _run_company_crawl(
+    container: JobAgentContainer,
+    *,
+    limit: int,
+) -> int:
+    try:
+        result = await container.company_crawler.crawl(limit=limit)
+    except (
+        CompanyCrawlerDisabledError,
+        CompanyDiscoveryError,
+        HttpRequestError,
+        ValueError,
+    ) as error:
+        logging.getLogger(__name__).error("Greenhouse company crawl failed: %s", error)
+        return 1
+
+    print(
+        f"Discovered {result.discovered_count} candidate boards; "
+        f"checked {result.checked_count}; "
+        f"skipped recent {result.skipped_recent_count}; "
+        f"inserted {result.inserted_count}; "
+        f"updated {result.updated_count}; "
+        f"failed {len(result.failures)}."
+    )
+    print(_format_company_grid(result.companies))
+    for failure in result.failures:
+        logging.getLogger(__name__).warning(
+            "Greenhouse board %s failed validation: %s",
+            failure.board_token,
+            failure.message,
+        )
+    return 0 if result.companies or not result.failures else 1
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     settings = Settings.from_env()
     arguments = _arguments(argv, settings=settings)
@@ -368,6 +483,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         settings.mysql_port,
         settings.mysql_database,
     )
+    if arguments.crawl_greenhouse_companies:
+        return asyncio.run(
+            _run_company_crawl(
+                container,
+                limit=arguments.crawl_limit,
+            )
+        )
     if arguments.search:
         return asyncio.run(_run_search(container, arguments))
     return 0

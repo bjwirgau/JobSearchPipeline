@@ -45,13 +45,15 @@ class DatabaseTests(unittest.TestCase):
         self.assertTrue(self.server.connections[0].committed)
         self.assertTrue(self.server.connections[0].closed)
         self.assertIn("job_prospects", self.server.tables)
+        self.assertIn("company_prospects", self.server.tables)
+        self.assertIn("crawl_pages", self.server.tables)
         self.assertNotIn("applications", self.server.tables)
         self.assertNotIn("candidates", self.server.tables)
         self.assertNotIn("jobs", self.server.tables)
         self.assertFalse(self.server.resume_candidate_foreign_key)
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {2, 4},
+            {2, 6},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)
@@ -92,7 +94,7 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {3, 4},
+            {3, 6},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)

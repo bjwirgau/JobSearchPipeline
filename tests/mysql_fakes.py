@@ -101,6 +101,10 @@ class FakeMySQLCursor:
                         "created_at",
                         "updated_at",
                     }
+            if " company_prospects " in statement:
+                self._connection.tables.setdefault("company_prospects", {})
+            if " crawl_pages " in statement:
+                self._connection.tables.setdefault("crawl_pages", {})
             return
         if statement.startswith("select coalesce(max(version)"):
             versions = self._connection.tables["schema_migrations"]
@@ -188,6 +192,47 @@ class FakeMySQLCursor:
             }
             self.rowcount = 1
             return
+        if statement.startswith("insert into company_prospects"):
+            company_id, company_name, board_token, company_url = values
+            existing = self._connection.tables["company_prospects"].get(
+                company_id
+            )
+            now = to_utc_naive(utc_now())
+            self._connection.tables["company_prospects"][company_id] = {
+                "company_id": company_id,
+                "company_name": company_name,
+                "board_token": board_token,
+                "company_url": company_url,
+                "created_at": existing["created_at"] if existing else now,
+                "updated_at": now,
+            }
+            self.rowcount = 1
+            return
+        if statement.startswith("insert into crawl_pages"):
+            (
+                page_url,
+                source,
+                page_type,
+                crawl_status,
+                last_crawled_at,
+                next_crawl_at,
+                last_error,
+            ) = values
+            existing = self._connection.tables["crawl_pages"].get(page_url)
+            now = to_utc_naive(utc_now())
+            self._connection.tables["crawl_pages"][page_url] = {
+                "page_url": page_url,
+                "source": source,
+                "page_type": page_type,
+                "crawl_status": crawl_status,
+                "last_crawled_at": last_crawled_at,
+                "next_crawl_at": next_crawl_at,
+                "last_error": last_error,
+                "created_at": existing["created_at"] if existing else now,
+                "updated_at": now,
+            }
+            self.rowcount = 1
+            return
         if statement.startswith("update job_prospects"):
             match, job_id = values
             row = self._connection.tables["job_prospects"].get(job_id)
@@ -212,6 +257,38 @@ class FakeMySQLCursor:
                 ),
             )[:limit]
             self._rows = [dict(row) for row in rows]
+            return
+        if statement.startswith("select company_url from company_prospects"):
+            self._rows = [
+                {"company_url": row["company_url"]}
+                for row in self._connection.tables["company_prospects"].values()
+            ]
+            return
+        if statement.startswith("select company_id") and "from company_prospects" in statement:
+            if "where company_id" in statement:
+                row = self._connection.tables["company_prospects"].get(values[0])
+                self._rows = [dict(row)] if row else []
+                return
+            limit = int(values[0])
+            rows = sorted(
+                self._connection.tables["company_prospects"].values(),
+                key=lambda row: (row["company_name"], row["board_token"]),
+            )[:limit]
+            self._rows = [dict(row) for row in rows]
+            return
+        if statement.startswith("select page_url") and "from crawl_pages" in statement:
+            if "where page_url" in statement:
+                row = self._connection.tables["crawl_pages"].get(values[0])
+                self._rows = [dict(row)] if row else []
+                return
+            source, page_type, as_of = values
+            self._rows = [
+                {"page_url": row["page_url"]}
+                for row in self._connection.tables["crawl_pages"].values()
+                if row["source"] == source
+                and row["page_type"] == page_type
+                and row["next_crawl_at"] > as_of
+            ]
             return
         if statement.startswith("select payload_json from resume_knowledge"):
             self._select_payload("resume_knowledge", values[0])
