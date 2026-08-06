@@ -7,6 +7,7 @@ project_root=$(dirname -- "$script_dir")
 log_dir="$project_root/logs"
 log_file="$log_dir/greenhouse-crawler.log"
 lock_dir="${TMPDIR:-/tmp}/job-agent-greenhouse-crawler.lock"
+crawl_limit=500
 
 mkdir -p "$log_dir"
 exec >>"$log_file" 2>&1
@@ -43,13 +44,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-printf '%s Starting Greenhouse company crawl with limit 100.\n' "$(timestamp)"
+printf f"Starting Greenhouse company crawl with limit ${crawl_limit}.\n" "$(timestamp)"
 cd "$project_root"
 
 set +e
 "$project_root/.venv/bin/python" "$project_root/app.py" \
     --crawl-greenhouse-companies \
-    --crawl-limit 100
+    --crawl-limit ${crawl_limit}
 status=$?
 set -e
 
