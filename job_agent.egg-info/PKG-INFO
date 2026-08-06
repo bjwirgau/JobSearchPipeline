@@ -115,11 +115,13 @@ Existing Greenhouse, Lever, Workday, and company career-page adapters remain ava
 Normalized jobs consistently include source identity, title, company, URL, location, description, detected skills, employment type, salary range, currency, remote status, and posting date. Missing source fields remain `None` or empty rather than being invented.
 
 MySQL stores the review-oriented projection in `job_prospects` with `job_id`,
-`match`, `title`, `company`, `location`, `salary`, `source`, and `url` columns.
-The match is nullable during search and updated to a score between `0` and `1`
-after the scoring stage. Candidate identity and preferences remain in
-`data/candidate_profile.json`; application records are not persisted in the
-current schema.
+`match`, `title`, `company`, `location`, `salary`, `source`, `url`, `created_at`,
+and `updated_at` columns. The database assigns both UTC timestamps when a
+prospect is first stored, preserves `created_at`, and refreshes `updated_at`
+when the prospect or its match score changes. The match is nullable during
+search and updated to a score between `0` and `1` after the scoring stage.
+Candidate identity and preferences remain in `data/candidate_profile.json`;
+application records are not persisted in the current schema.
 
 ### Enable and Configure Job Searching
 

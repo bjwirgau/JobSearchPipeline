@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
 from agents import (
     MatchingAgent,
@@ -57,7 +58,13 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.jobs, (job,))
         self.assertEqual(result.stored_count, 1)
-        self.assertEqual(self.repository.get(job.job_id), JobProspect.from_job(job))
+        stored = self.repository.get(job.job_id)
+        self.assertEqual(
+            replace(stored, created_at=None, updated_at=None),
+            JobProspect.from_job(job),
+        )
+        self.assertIsNotNone(stored.created_at)
+        self.assertIsNotNone(stored.updated_at)
 
     async def test_workflow_persists_match_score_on_the_job_prospect(self) -> None:
         job = JobPosting(

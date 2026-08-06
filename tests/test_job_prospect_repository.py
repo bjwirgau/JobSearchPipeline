@@ -33,10 +33,14 @@ class JobProspectRepositoryTests(unittest.TestCase):
             salary_currency="USD",
         )
         self.assertEqual(self.repository.save_jobs((job,)), 1)
+        created = self.repository.get(job.job_id)
+        self.assertIsNotNone(created)
         self.assertEqual(
-            self.repository.get(job.job_id),
+            replace(created, created_at=None, updated_at=None),
             JobProspect.from_job(job),
         )
+        self.assertIsNotNone(created.created_at)
+        self.assertEqual(created.created_at, created.updated_at)
 
         updated_job = replace(job, title="Senior Data Engineer")
         self.repository.save_jobs((updated_job,))
@@ -54,13 +58,44 @@ class JobProspectRepositoryTests(unittest.TestCase):
         self.assertEqual(self.repository.update_matches((match,)), 1)
 
         expected = JobProspect.from_job(updated_job, match=0.875)
-        self.assertEqual(self.repository.get(job.job_id), expected)
-        self.assertEqual(self.repository.list_ranked(), (expected,))
+        updated = self.repository.get(job.job_id)
+        self.assertEqual(
+            replace(updated, created_at=None, updated_at=None),
+            expected,
+        )
+        self.assertEqual(updated.created_at, created.created_at)
+        self.assertGreaterEqual(updated.updated_at, created.updated_at)
+        self.assertEqual(self.repository.list_ranked(), (updated,))
 
         rescored = replace(expected, match=0.9)
         self.repository.save(rescored)
         self.repository.save_jobs((updated_job,))
-        self.assertEqual(self.repository.get(job.job_id), rescored)
+        final = self.repository.get(job.job_id)
+        self.assertEqual(
+            replace(final, created_at=None, updated_at=None),
+            rescored,
+        )
+        self.assertEqual(final.created_at, created.created_at)
+        self.assertGreaterEqual(final.updated_at, updated.updated_at)
+
+    def test_serializes_database_timestamps(self) -> None:
+        prospect = JobProspect(
+            job_id="job-1",
+            match=None,
+            title="Data Engineer",
+            company="Example",
+            location="Remote",
+            salary="Not provided",
+            source="sample",
+            url="https://example.com/jobs/1",
+        )
+        self.repository.save(prospect)
+
+        stored = self.repository.get(prospect.job_id)
+        payload = stored.to_dict()
+
+        self.assertTrue(str(payload["created_at"]).endswith("+00:00"))
+        self.assertTrue(str(payload["updated_at"]).endswith("+00:00"))
 
     def test_rejects_invalid_match_score(self) -> None:
         with self.assertRaisesRegex(ValueError, "between 0 and 1"):

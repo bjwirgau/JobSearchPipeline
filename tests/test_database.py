@@ -49,7 +49,56 @@ class DatabaseTests(unittest.TestCase):
         self.assertNotIn("candidates", self.server.tables)
         self.assertNotIn("jobs", self.server.tables)
         self.assertFalse(self.server.resume_candidate_foreign_key)
-        self.assertEqual(set(self.server.tables["schema_migrations"]), {2, 3})
+        self.assertEqual(
+            set(self.server.tables["schema_migrations"]),
+            {2, 4},
+        )
+        self.assertIn("created_at", self.server.job_prospect_columns)
+        self.assertIn("updated_at", self.server.job_prospect_columns)
+
+    def test_version_three_schema_adds_job_prospect_timestamps(self) -> None:
+        self.server.tables = {
+            "schema_migrations": {
+                3: {"version": 3, "applied_at": None},
+            },
+            "resume_knowledge": {},
+            "job_prospects": {
+                "existing-job": {
+                    "job_id": "existing-job",
+                    "match": None,
+                    "title": "Data Engineer",
+                    "company": "Example",
+                    "location": "Remote",
+                    "salary": "Not provided",
+                    "source": "fixture",
+                    "url": "https://example.com/jobs/1",
+                }
+            },
+            "workflow_runs": {},
+        }
+        self.server.job_prospect_columns = {
+            "job_id",
+            "match",
+            "title",
+            "company",
+            "location",
+            "salary",
+            "source",
+            "url",
+        }
+        self.server.resume_candidate_foreign_key = False
+
+        initialize_schema(self.database)
+
+        self.assertEqual(
+            set(self.server.tables["schema_migrations"]),
+            {3, 4},
+        )
+        self.assertIn("created_at", self.server.job_prospect_columns)
+        self.assertIn("updated_at", self.server.job_prospect_columns)
+        migrated = self.server.tables["job_prospects"]["existing-job"]
+        self.assertIsNotNone(migrated["created_at"])
+        self.assertIsNotNone(migrated["updated_at"])
 
     def test_failed_transaction_rolls_back_and_closes(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "stop transaction"):

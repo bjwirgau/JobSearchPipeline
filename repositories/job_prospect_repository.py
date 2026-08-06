@@ -32,7 +32,8 @@ class JobProspectRepository:
                 location = incoming.location,
                 salary = incoming.salary,
                 source = incoming.source,
-                url = incoming.url
+                url = incoming.url,
+                updated_at = UTC_TIMESTAMP(6)
             """,
             (
                 prospect.job_id,
@@ -58,7 +59,8 @@ class JobProspectRepository:
                 cursor.execute(
                     """
                     UPDATE job_prospects
-                    SET `match` = %s
+                    SET `match` = %s,
+                        updated_at = UTC_TIMESTAMP(6)
                     WHERE job_id = %s
                     """,
                     (result.score, result.job_id),
@@ -69,7 +71,8 @@ class JobProspectRepository:
         with self._database.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT job_id, `match`, title, company, location, salary, source, url
+                SELECT job_id, `match`, title, company, location, salary, source, url,
+                       created_at, updated_at
                 FROM job_prospects
                 WHERE job_id = %s
                 """,
@@ -84,7 +87,8 @@ class JobProspectRepository:
         with self._database.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT job_id, `match`, title, company, location, salary, source, url
+                SELECT job_id, `match`, title, company, location, salary, source, url,
+                       created_at, updated_at
                 FROM job_prospects
                 ORDER BY (`match` IS NULL), `match` DESC, title, company
                 LIMIT %s

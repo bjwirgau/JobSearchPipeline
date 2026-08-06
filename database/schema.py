@@ -7,7 +7,7 @@ from utils.dates import to_utc_naive, utc_now
 from .connection import Database, MySQLCursor
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA_STATEMENTS = (
     """
@@ -35,6 +35,9 @@ SCHEMA_STATEMENTS = (
         salary VARCHAR(128) NOT NULL,
         source VARCHAR(64) NOT NULL,
         url VARCHAR(2048) NOT NULL,
+        created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+            ON UPDATE CURRENT_TIMESTAMP(6),
         PRIMARY KEY (job_id),
         KEY idx_job_prospects_match (`match`),
         CONSTRAINT ck_job_prospects_match
@@ -64,8 +67,10 @@ def initialize_schema(database: Database) -> None:
         )
         row = cursor.fetchone()
         current_version = int(row["version"]) if row else 0
-        if current_version < SCHEMA_VERSION:
+        if current_version < 3:
             _remove_legacy_tables(database, cursor)
+        if current_version < 4:
+            _add_job_prospect_timestamps(database, cursor)
         cursor.execute(
             """
             INSERT IGNORE INTO schema_migrations(version, applied_at)
@@ -97,3 +102,33 @@ def _remove_legacy_tables(database: Database, cursor: MySQLCursor) -> None:
         )
     for table_name in ("applications", "jobs", "candidates"):
         cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+
+def _add_job_prospect_timestamps(
+    database: Database,
+    cursor: MySQLCursor,
+) -> None:
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME AS app_column_name
+        FROM information_schema.columns
+        WHERE table_schema = %s
+          AND table_name = 'job_prospects'
+          AND column_name IN ('created_at', 'updated_at')
+        """,
+        (database.config.database,),
+    )
+    existing = {str(row["app_column_name"]) for row in cursor.fetchall()}
+    additions: list[str] = []
+    if "created_at" not in existing:
+        additions.append(
+            "ADD COLUMN created_at DATETIME(6) NOT NULL "
+            "DEFAULT CURRENT_TIMESTAMP(6)"
+        )
+    if "updated_at" not in existing:
+        additions.append(
+            "ADD COLUMN updated_at DATETIME(6) NOT NULL "
+            "DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)"
+        )
+    if additions:
+        cursor.execute("ALTER TABLE job_prospects " + ", ".join(additions))

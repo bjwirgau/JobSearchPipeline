@@ -5,6 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from utils.dates import to_utc_naive, utc_now
+
 
 class FakeMySQLServer:
     """Persist committed rows across short-lived fake connector connections."""
@@ -18,9 +20,9 @@ class FakeMySQLServer:
             "resume_knowledge": {},
             "jobs": {},
             "applications": {},
-            "job_prospects": {},
             "workflow_runs": {},
         }
+        self.job_prospect_columns: set[str] = set()
         self.resume_candidate_foreign_key = True
         self.connect_calls: list[dict[str, object]] = []
         self.connections: list[FakeMySQLConnection] = []
@@ -36,6 +38,7 @@ class FakeMySQLConnection:
     def __init__(self, server: FakeMySQLServer) -> None:
         self._server = server
         self.tables = deepcopy(server.tables)
+        self.job_prospect_columns = set(server.job_prospect_columns)
         self.resume_candidate_foreign_key = server.resume_candidate_foreign_key
         self.committed = False
         self.rolled_back = False
@@ -46,6 +49,7 @@ class FakeMySQLConnection:
 
     def commit(self) -> None:
         self._server.tables = deepcopy(self.tables)
+        self._server.job_prospect_columns = set(self.job_prospect_columns)
         self._server.resume_candidate_foreign_key = (
             self.resume_candidate_foreign_key
         )
@@ -82,6 +86,21 @@ class FakeMySQLCursor:
         self._rows = []
 
         if statement.startswith("create table if not exists"):
+            if " job_prospects " in statement:
+                self._connection.tables.setdefault("job_prospects", {})
+                if not self._connection.job_prospect_columns:
+                    self._connection.job_prospect_columns = {
+                        "job_id",
+                        "match",
+                        "title",
+                        "company",
+                        "location",
+                        "salary",
+                        "source",
+                        "url",
+                        "created_at",
+                        "updated_at",
+                    }
             return
         if statement.startswith("select coalesce(max(version)"):
             versions = self._connection.tables["schema_migrations"]
@@ -96,8 +115,25 @@ class FakeMySQLCursor:
                 }
             ]
             return
+        if statement.startswith("select column_name as app_column_name"):
+            self._rows = [
+                {"app_column_name": column_name}
+                for column_name in sorted(
+                    self._connection.job_prospect_columns
+                    & {"created_at", "updated_at"}
+                )
+            ]
+            return
         if statement.startswith("alter table resume_knowledge"):
             self._connection.resume_candidate_foreign_key = False
+            return
+        if statement.startswith("alter table job_prospects"):
+            now = to_utc_naive(utc_now())
+            for column_name in ("created_at", "updated_at"):
+                if f"add column {column_name}" in statement:
+                    self._connection.job_prospect_columns.add(column_name)
+                    for row in self._connection.tables["job_prospects"].values():
+                        row[column_name] = now
             return
         if statement.startswith("drop table if exists"):
             table_name = statement.rsplit(" ", 1)[-1]
@@ -133,6 +169,7 @@ class FakeMySQLCursor:
                 url,
             ) = values
             existing = self._connection.tables["job_prospects"].get(job_id)
+            now = to_utc_naive(utc_now())
             self._connection.tables["job_prospects"][job_id] = {
                 "job_id": job_id,
                 "match": (
@@ -146,6 +183,8 @@ class FakeMySQLCursor:
                 "salary": salary,
                 "source": source,
                 "url": url,
+                "created_at": existing["created_at"] if existing else now,
+                "updated_at": now,
             }
             self.rowcount = 1
             return
@@ -154,6 +193,7 @@ class FakeMySQLCursor:
             row = self._connection.tables["job_prospects"].get(job_id)
             if row:
                 row["match"] = match
+                row["updated_at"] = to_utc_naive(utc_now())
                 self.rowcount = 1
             return
         if statement.startswith("select job_id") and "from job_prospects" in statement:

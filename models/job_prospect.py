@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Mapping
+
+from utils.dates import ensure_utc, to_iso
 
 from .job import JobPosting
 
@@ -19,6 +22,8 @@ class JobProspect:
     salary: str
     source: str
     url: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     def __post_init__(self) -> None:
         for field_name in ("job_id", "title", "company", "source", "url"):
@@ -28,6 +33,10 @@ class JobProspect:
             object.__setattr__(self, field_name, value)
         if self.match is not None and not 0 <= self.match <= 1:
             raise ValueError("match must be between 0 and 1")
+        for field_name in ("created_at", "updated_at"):
+            value = getattr(self, field_name)
+            if value is not None:
+                object.__setattr__(self, field_name, ensure_utc(value))
 
     @classmethod
     def from_job(
@@ -63,6 +72,8 @@ class JobProspect:
             salary=str(row["salary"]),
             source=str(row["source"]),
             url=str(row["url"]),
+            created_at=_timestamp(row.get("created_at")),
+            updated_at=_timestamp(row.get("updated_at")),
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -75,6 +86,8 @@ class JobProspect:
             "salary": self.salary,
             "source": self.source,
             "url": self.url,
+            "created_at": to_iso(self.created_at),
+            "updated_at": to_iso(self.updated_at),
         }
 
 
@@ -91,3 +104,11 @@ def _format_salary(job: JobPosting) -> str:
         else f"{minimum}-{maximum}"
     )
     return f"{job.salary_currency} {amount}" if job.salary_currency else amount
+
+
+def _timestamp(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if not isinstance(value, datetime):
+        raise TypeError("job prospect timestamps must be datetime values")
+    return ensure_utc(value)

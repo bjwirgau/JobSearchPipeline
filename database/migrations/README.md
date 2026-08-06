@@ -5,3 +5,5 @@ The complete MySQL schema for new databases is defined in `database/schema.py`. 
 - `002_resume_knowledge.sql` adds structured resume knowledge persistence.
 - `003_job_prospects.sql` removes candidate, job, and application tables and adds
   the focused job-prospect projection.
+- `004_job_prospect_timestamps.sql` adds database-managed creation and update
+  timestamps to job prospects.
