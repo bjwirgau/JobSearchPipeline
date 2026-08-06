@@ -37,14 +37,14 @@ Search → Normalize → Parse → Score → Review → Tailor → Apply → Tra
 - **Review:** require a person to select and approve an opportunity.
 - **Tailor:** create local resume guidance and a cover-letter draft using known facts.
 - **Apply:** validate the application and hand it to a configured submission gateway.
-- **Track:** persist jobs, applications, statuses, and workflow events.
+- **Track:** persist scored job prospects and workflow events.
 
 ## Phase 1 Features
 
 - Python 3.10+ configuration and core runtime
 - Validated dataclass models for candidates, jobs, matches, applications, and workflows
-- MySQL 8 schema with transactional candidate, job, application, and workflow tables
-- Native JSON columns for flexible entity payloads alongside indexed relational fields
+- MySQL 8 schema with job-prospect, resume-knowledge, and workflow tables
+- Focused relational job-prospect columns for review and reporting
 - Repository classes that isolate persistence from agents
 - Source-independent asynchronous search orchestration
 - In-memory job source for local development and tests
@@ -89,7 +89,7 @@ Phase 2 does not extract a PDF automatically. Review and correct the structured 
 
 ## Phase 3: Job Search Agent
 
-The search agent discovers jobs by criteria rather than iterating over a list of target companies. It builds one query per role and location, requests enabled discovery providers concurrently, normalizes their results into `JobPosting`, enforces hard filters, deduplicates across providers, stores jobs in MySQL, and hands them to parsing and matching.
+The search agent discovers jobs by criteria rather than iterating over a list of target companies. It builds one query per role and location, requests enabled discovery providers concurrently, normalizes their results into `JobPosting`, enforces hard filters, deduplicates across providers, stores job prospects in MySQL, and hands them to parsing and matching.
 
 Search criteria include:
 
@@ -113,6 +113,13 @@ Search criteria include:
 Existing Greenhouse, Lever, Workday, and company career-page adapters remain available as optional supplemental sources. They are not required for discovery and are useful only when a direct company feed needs to be added to the broader results. LinkedIn discovery is delegated to an Apify Store Actor; this project does not automate LinkedIn login or manage browser sessions.
 
 Normalized jobs consistently include source identity, title, company, URL, location, description, detected skills, employment type, salary range, currency, remote status, and posting date. Missing source fields remain `None` or empty rather than being invented.
+
+MySQL stores the review-oriented projection in `job_prospects` with `job_id`,
+`match`, `title`, `company`, `location`, `salary`, `source`, and `url` columns.
+The match is nullable during search and updated to a score between `0` and `1`
+after the scoring stage. Candidate identity and preferences remain in
+`data/candidate_profile.json`; application records are not persisted in the
+current schema.
 
 ### Enable and Configure Job Searching
 
@@ -326,16 +333,15 @@ When remote-only search is active, profile and CLI locations (and their radius) 
 
 Discovery source names are `adzuna`, `remotive`, `usajobs`, and `linkedin`. Supplemental names are `greenhouse`, `lever`, `workday`, and `career_page`. Omitting `--source` searches every enabled source.
 
-Results are normalized, filtered, deduplicated, scored, printed to the terminal, and stored in the configured MySQL database. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one source is configured.
+Results are normalized, filtered, deduplicated, scored, printed to the terminal, and stored in the configured MySQL `job_prospects` table. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one source is configured.
 
-Live search and application submission are disabled by default:
+Live search is disabled by default:
 
 ```env
 JOB_AGENT_SEARCH_ENABLED=false
-JOB_AGENT_APPLICATION_SUBMISSION_ENABLED=false
 ```
 
-Enabling a flag alone does not configure an external source, browser runtime, or application gateway.
+Enabling the flag alone does not configure an external source or browser runtime. Application agents remain scaffolded for a later phase, but the current application container and database do not persist application state.
 
 ## Project Structure
 
@@ -454,7 +460,7 @@ To run Python's built-in test discovery directly with verbose console output, us
 python3 -m unittest discover -s ./tests -p 'test_*.py' -v
 ```
 
-The suite covers resume knowledge, parsing, matching, MySQL repository behavior, the search safety flag, and fixture-based normalization for every Phase 3 source without making network or live-database requests. Repository tests use an injected in-memory MySQL connector fake; use a separate integration environment to validate credentials and server permissions.
+The suite covers resume knowledge, parsing, matching, MySQL job-prospect persistence, the search safety flag, and fixture-based normalization for every Phase 3 source without making network or live-database requests. Repository tests use an injected in-memory MySQL connector fake; use a separate integration environment to validate credentials and server permissions.
 
 ## Optional API
 
@@ -478,4 +484,4 @@ python3 -m pip install -e '.[api]'
 
 ## Next Phase
 
-The next phase can add source health telemetry, pagination checkpoints, evidence links, match persistence, and a review interface. Live application automation should remain out of scope until validation, approval auditing, and platform-specific dry runs are reliable.
+The next phase can add source health telemetry, pagination checkpoints, evidence links, and a review interface. Live application automation should remain out of scope until application persistence, validation, approval auditing, and platform-specific dry runs are reliable.

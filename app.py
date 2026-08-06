@@ -1,4 +1,4 @@
-"""Application composition root and CLI for the Phase 3 job-agent pipeline."""
+"""Composition root and CLI for the Phase 3 job-agent pipeline."""
 
 from __future__ import annotations
 
@@ -12,14 +12,10 @@ from pathlib import Path
 from typing import Sequence
 
 from agents import (
-    ApplyAgent,
-    CoverLetterAgent,
     MatchingAgent,
     ParserAgent,
     SearchAgent,
     SearchQueryBuilder,
-    TailoringAgent,
-    ValidationAgent,
 )
 from config import Settings
 from database import Database, MySQLConfig, initialize_schema
@@ -31,13 +27,10 @@ from models import (
     SearchCriteria,
 )
 from repositories import (
-    ApplicationRepository,
-    CandidateRepository,
-    JobRepository,
+    JobProspectRepository,
     ResumeKnowledgeRepository,
 )
 from services import (
-    DocumentService,
     LoggingNotificationService,
     ResumeKnowledgeError,
     ResumeKnowledgeService,
@@ -45,23 +38,20 @@ from services import (
 )
 from services.job_sources import LinkedInJobSource
 from utils.logging import configure_logging
-from workflows import ApplicationWorkflow, JobSearchWorkflow
+from workflows import JobSearchWorkflow
 
 
 @dataclass(frozen=True, slots=True)
-class ApplicationContainer:
+class JobAgentContainer:
     settings: Settings
     database: Database
-    candidates: CandidateRepository
-    jobs: JobRepository
-    applications: ApplicationRepository
+    job_prospects: JobProspectRepository
     resume_knowledge: ResumeKnowledgeRepository
     resume_knowledge_service: ResumeKnowledgeService
     job_search_workflow: JobSearchWorkflow
-    application_workflow: ApplicationWorkflow
 
 
-def build_container(settings: Settings | None = None) -> ApplicationContainer:
+def build_container(settings: Settings | None = None) -> JobAgentContainer:
     settings = settings or Settings.from_env()
     settings.prepare_directories()
     database = Database(
@@ -76,12 +66,9 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
     )
     initialize_schema(database)
 
-    candidates = CandidateRepository(database)
-    jobs = JobRepository(database)
-    applications = ApplicationRepository(database)
+    job_prospects = JobProspectRepository(database)
     resume_knowledge = ResumeKnowledgeRepository(database)
     resume_knowledge_service = ResumeKnowledgeService(settings.candidate_profile_path)
-    documents = DocumentService(settings.generated_documents_dir)
     notifications = LoggingNotificationService()
 
     try:
@@ -99,39 +86,21 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
 
     search_agent = SearchAgent(
         sources=job_sources,
-        repository=jobs,
+        repository=job_prospects,
         enabled=settings.search_enabled,
     )
     parser_agent = ParserAgent()
     matching_agent = MatchingAgent()
-    tailoring_agent = TailoringAgent(documents)
-    cover_letter_agent = CoverLetterAgent(documents)
-    validation_agent = ValidationAgent()
-    apply_agent = ApplyAgent(
-        repository=applications,
-        enabled=settings.application_submission_enabled,
-    )
-
-    return ApplicationContainer(
+    return JobAgentContainer(
         settings=settings,
         database=database,
-        candidates=candidates,
-        jobs=jobs,
-        applications=applications,
+        job_prospects=job_prospects,
         resume_knowledge=resume_knowledge,
         resume_knowledge_service=resume_knowledge_service,
         job_search_workflow=JobSearchWorkflow(
             search_agent=search_agent,
             parser_agent=parser_agent,
             matching_agent=matching_agent,
-            notifications=notifications,
-        ),
-        application_workflow=ApplicationWorkflow(
-            repository=applications,
-            tailoring_agent=tailoring_agent,
-            cover_letter_agent=cover_letter_agent,
-            validation_agent=validation_agent,
-            apply_agent=apply_agent,
             notifications=notifications,
         ),
     )
@@ -348,7 +317,7 @@ def _run_apify_dry_run(settings: Settings, arguments: argparse.Namespace) -> int
 
 
 async def _run_search(
-    container: ApplicationContainer,
+    container: JobAgentContainer,
     arguments: argparse.Namespace,
 ) -> int:
     candidate = _load_candidate(container.settings.candidate_profile_path)
@@ -392,9 +361,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     container = build_container(settings)
     logging.getLogger(__name__).info(
         "Job Agent Phase 3 initialized "
-        "(search=%s, submission=%s, database=%s@%s:%s/%s)",
+        "(search=%s, database=%s@%s:%s/%s)",
         settings.search_enabled,
-        settings.application_submission_enabled,
         settings.mysql_user,
         settings.mysql_host,
         settings.mysql_port,

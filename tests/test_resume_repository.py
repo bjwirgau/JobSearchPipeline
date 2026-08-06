@@ -6,8 +6,8 @@ import unittest
 from dataclasses import replace
 
 from database import Database, MySQLConfig, initialize_schema
-from models import CandidateProfile, ResumeKnowledgeBase
-from repositories import CandidateRepository, ResumeKnowledgeRepository
+from models import ResumeKnowledgeBase
+from repositories import ResumeKnowledgeRepository
 from tests.mysql_fakes import FakeMySQLServer
 
 
@@ -18,13 +18,6 @@ class ResumeKnowledgeRepositoryTests(unittest.TestCase):
             connect_factory=FakeMySQLServer().connect,
         )
         initialize_schema(database)
-        CandidateRepository(database).save(
-            CandidateProfile(
-                candidate_id="candidate-1",
-                full_name="Example Candidate",
-                email="candidate@example.com",
-            )
-        )
         self.repository = ResumeKnowledgeRepository(database)
 
     def test_saves_updates_reads_and_deletes_knowledge(self) -> None:

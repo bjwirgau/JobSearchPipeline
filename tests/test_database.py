@@ -44,6 +44,12 @@ class DatabaseTests(unittest.TestCase):
         )
         self.assertTrue(self.server.connections[0].committed)
         self.assertTrue(self.server.connections[0].closed)
+        self.assertIn("job_prospects", self.server.tables)
+        self.assertNotIn("applications", self.server.tables)
+        self.assertNotIn("candidates", self.server.tables)
+        self.assertNotIn("jobs", self.server.tables)
+        self.assertFalse(self.server.resume_candidate_foreign_key)
+        self.assertEqual(set(self.server.tables["schema_migrations"]), {2, 3})
 
     def test_failed_transaction_rolls_back_and_closes(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "stop transaction"):

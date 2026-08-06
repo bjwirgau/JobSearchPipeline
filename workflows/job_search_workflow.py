@@ -84,6 +84,7 @@ class JobSearchWorkflow:
             self._matching.score(candidate, job, resume_knowledge)
             for job in parsed_jobs
         )
+        self._search.store_matches(matches)
         run = run.record(
             WorkflowStage.SCORE,
             WorkflowStatus.COMPLETED,

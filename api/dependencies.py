@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from repositories import ApplicationRepository, CandidateRepository, JobRepository
+from repositories import JobProspectRepository
 
 
 @dataclass(frozen=True, slots=True)
 class ApiDependencies:
-    jobs: JobRepository
-    applications: ApplicationRepository
-    candidates: CandidateRepository
+    job_prospects: JobProspectRepository

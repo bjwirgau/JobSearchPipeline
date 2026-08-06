@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .dependencies import ApiDependencies
-from .routes import list_applications, list_jobs, list_matches
+from .routes import list_job_prospects, list_matches
 
 
 def create_app(dependencies: ApiDependencies):
@@ -18,16 +18,12 @@ def create_app(dependencies: ApiDependencies):
     def health() -> dict[str, str]:
         return {"status": "ok", "phase": "1"}
 
-    @app.get("/jobs")
-    def jobs(limit: int = 100):
-        return list_jobs(dependencies.jobs, limit=limit)
+    @app.get("/job-prospects")
+    def job_prospects(limit: int = 100):
+        return list_job_prospects(dependencies.job_prospects, limit=limit)
 
     @app.get("/matches")
     def matches():
         return list_matches()
-
-    @app.get("/applications")
-    def applications():
-        return list_applications(dependencies.applications)
 
     return app

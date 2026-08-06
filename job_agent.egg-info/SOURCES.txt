@@ -14,7 +14,6 @@ api/__init__.py
 api/dependencies.py
 api/main.py
 api/routes/__init__.py
-api/routes/applications.py
 api/routes/jobs.py
 api/routes/matches.py
 browser/__init__.py
@@ -42,13 +41,14 @@ models/__init__.py
 models/application.py
 models/candidate.py
 models/job.py
+models/job_prospect.py
 models/match.py
 models/resume.py
 models/workflow.py
 repositories/__init__.py
 repositories/application_repository.py
 repositories/candidate_repository.py
-repositories/job_repository.py
+repositories/job_prospect_repository.py
 repositories/resume_repository.py
 services/__init__.py
 services/document_service.py
@@ -73,10 +73,9 @@ services/job_sources/workday.py
 tests/__init__.py
 tests/mysql_fakes.py
 tests/test_app.py
-tests/test_application_repository.py
 tests/test_countries.py
 tests/test_database.py
-tests/test_job_repository.py
+tests/test_job_prospect_repository.py
 tests/test_job_sources.py
 tests/test_matching_agent.py
 tests/test_parser_agent.py

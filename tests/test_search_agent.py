@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import unittest
 
-from agents import SearchAgent, SearchDisabledError, SearchQueryBuilder
+from agents import (
+    MatchingAgent,
+    ParserAgent,
+    SearchAgent,
+    SearchDisabledError,
+    SearchQueryBuilder,
+)
 from database import Database, MySQLConfig, initialize_schema
-from models import JobPosting, SearchCriteria
-from repositories import JobRepository
-from services import InMemoryJobSource
+from models import CandidateProfile, JobPosting, JobProspect, SearchCriteria
+from repositories import JobProspectRepository
+from services import InMemoryJobSource, LoggingNotificationService
 from tests.mysql_fakes import FakeMySQLServer
+from workflows import JobSearchWorkflow
 
 
 class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
@@ -19,7 +26,7 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
             connect_factory=FakeMySQLServer().connect,
         )
         initialize_schema(database)
-        self.repository = JobRepository(database)
+        self.repository = JobProspectRepository(database)
 
     async def test_search_is_disabled_by_default(self) -> None:
         agent = SearchAgent(sources=(), repository=self.repository)
@@ -50,7 +57,48 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.jobs, (job,))
         self.assertEqual(result.stored_count, 1)
-        self.assertEqual(self.repository.get(job.job_id), job)
+        self.assertEqual(self.repository.get(job.job_id), JobProspect.from_job(job))
+
+    async def test_workflow_persists_match_score_on_the_job_prospect(self) -> None:
+        job = JobPosting(
+            source="fixture",
+            external_id="matched-job",
+            title="Data Engineer",
+            company="Example",
+            url="https://example.com/jobs/matched",
+            location="Denver, CO",
+            skills=("Python",),
+        )
+        search_agent = SearchAgent(
+            sources=(InMemoryJobSource("fixture", (job,)),),
+            repository=self.repository,
+            enabled=True,
+        )
+        workflow = JobSearchWorkflow(
+            search_agent=search_agent,
+            parser_agent=ParserAgent(),
+            matching_agent=MatchingAgent(),
+            notifications=LoggingNotificationService(),
+        )
+
+        result = await workflow.run(
+            CandidateProfile(
+                candidate_id="candidate-1",
+                full_name="Example Candidate",
+                email="candidate@example.com",
+                skills=("Python",),
+                desired_titles=("Data Engineer",),
+                desired_locations=("Denver, CO",),
+            ),
+            SearchCriteria(
+                job_titles=("Data Engineer",),
+                locations=("Denver, CO",),
+            ),
+        )
+
+        prospect = self.repository.get(job.job_id)
+        self.assertIsNotNone(prospect)
+        self.assertAlmostEqual(prospect.match, result.matches[0].score)
 
     async def test_query_builder_preserves_discovery_criteria(self) -> None:
         query = SearchQueryBuilder().build(

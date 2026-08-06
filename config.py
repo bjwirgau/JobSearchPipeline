@@ -97,7 +97,6 @@ class Settings:
     browser_fallback: str = "none"
     http_timeout_seconds: float = 20.0
     http_user_agent: str = "JobAgent/0.3 (+local-job-search)"
-    application_submission_enabled: bool = False
     openai_api_key: str | None = None
 
     @classmethod
@@ -162,9 +161,6 @@ class Settings:
             http_user_agent=values.get(
                 "JOB_AGENT_HTTP_USER_AGENT",
                 "JobAgent/0.3 (+local-job-search)",
-            ),
-            application_submission_enabled=_as_bool(
-                values.get("JOB_AGENT_APPLICATION_SUBMISSION_ENABLED")
             ),
             openai_api_key=values.get("OPENAI_API_KEY") or None,
         )

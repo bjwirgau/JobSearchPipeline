@@ -9,12 +9,13 @@ from datetime import datetime, timedelta, timezone
 
 from models import (
     JobPosting,
+    MatchResult,
     SearchCriteria,
     SearchFailure,
     SearchQuery,
     SearchRunResult,
 )
-from repositories import JobRepository
+from repositories import JobProspectRepository
 from services import JobSourceService
 from utils.countries import remote_country_is_eligible
 from utils.text import normalize_text
@@ -93,7 +94,7 @@ class SearchAgent:
         self,
         *,
         sources: Sequence[JobSourceService],
-        repository: JobRepository,
+        repository: JobProspectRepository,
         enabled: bool = False,
         query_builder: SearchQueryBuilder | None = None,
         deduplicator: FingerprintDeduplicator | None = None,
@@ -147,7 +148,7 @@ class SearchAgent:
 
         eligible = tuple(job for job in fetched if self._passes_filters(job, criteria))
         deduplicated = self._deduplicator.deduplicate(eligible)
-        stored_count = self._repository.save_many(deduplicated)
+        stored_count = self._repository.save_jobs(deduplicated)
         return SearchRunResult(
             queries=queries,
             selected_sources=tuple(source.name for source in sources),
@@ -158,6 +159,9 @@ class SearchAgent:
             jobs=deduplicated,
             failures=tuple(failures),
         )
+
+    def store_matches(self, matches: Sequence[MatchResult]) -> int:
+        return self._repository.update_matches(matches)
 
     def select_sources(self, criteria: SearchCriteria) -> tuple[JobSourceService, ...]:
         if criteria.source_names:
