@@ -507,6 +507,43 @@ python3 app.py
 
 Existing SQLite files are not read or migrated automatically. Export any data that must be retained and import it into MySQL before removing an old database file.
 
+### Copy the AWS database to local MySQL
+
+The guarded database-copy command opens an AWS Systems Manager port-forwarding session, streams a consistent MySQL dump from EC2 into the local Docker database, and closes the tunnel afterward. It replaces the local database only when the explicit replacement flag is present and first writes a restorable backup under `data/database_backups/` (ignored by Git).
+
+Prerequisites:
+
+- AWS CLI v2 and the Session Manager plugin, authenticated to the account containing the EC2 instance
+- `mysqldump` installed locally and available on `PATH`
+- The EC2 instance online in Systems Manager with MySQL listening on its loopback port
+- The remote application database username and password
+
+On macOS, the MySQL client can be installed with Homebrew:
+
+```bash
+brew install mysql-client
+export PATH="/opt/homebrew/opt/mysql-client/bin:$PATH"
+```
+
+Run the copy from the project root. The command securely prompts for the remote MySQL password when `JOB_AGENT_AWS_MYSQL_PASSWORD` is unset:
+
+```bash
+./scripts/copy_aws_database.sh \
+  --instance-id i-031605ff346d95e2e \
+  --region us-east-1 \
+  --replace-local-database
+```
+
+Use `--profile PROFILE_NAME` when the required AWS session is stored in a named CLI profile. The remote database and user default to `job_agent`; override them with `--remote-database` and `--remote-user`. The remote and local database names must match so the dump can replace the local database exactly.
+
+If the import fails after replacement begins, restore the timestamped backup printed by the command:
+
+```bash
+docker compose -f docker-compose.yml exec -T mysql \
+  sh -c 'exec mysql --user=root --password="$MYSQL_ROOT_PASSWORD"' \
+  < data/database_backups/LOCAL_BACKUP.sql
+```
+
 ## Tests
 
 Run the standard-library test suite:

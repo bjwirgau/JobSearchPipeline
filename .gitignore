@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 *.sqlite3
 *.db
+*.pkg
 .env
 .venv/
 .pytest_cache/
@@ -10,3 +11,4 @@ __pycache__/
 /logs/
 data/generated_documents/*
 !data/generated_documents/.gitkeep
+/data/database_backups/
