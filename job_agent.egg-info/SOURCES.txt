@@ -81,12 +81,14 @@ tests/mysql_fakes.py
 tests/test_app.py
 tests/test_company_crawler.py
 tests/test_company_prospect_repository.py
+tests/test_copy_aws_database_script.py
 tests/test_countries.py
 tests/test_crawl_page_repository.py
 tests/test_database.py
 tests/test_http_service.py
 tests/test_job_prospect_repository.py
 tests/test_job_sources.py
+tests/test_llm_service.py
 tests/test_matching_agent.py
 tests/test_parser_agent.py
 tests/test_resume_knowledge.py

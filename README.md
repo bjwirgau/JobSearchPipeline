@@ -13,7 +13,7 @@ Search → Normalize → Parse → Score → Review → Tailor → Apply → Tra
 - **Search:** build queries, select source adapters, combine results, and apply inexpensive filters.
 - **Normalize:** source adapters convert vendor responses into shared `JobPosting` models.
 - **Parse:** extract requirements, responsibilities, and recognized skills.
-- **Score:** produce a transparent candidate/job score and qualification gaps.
+- **Score:** use structured, evidence-grounded LLM output to assess fit and qualification gaps.
 - **Review:** require a person to select and approve an opportunity.
 - **Tailor:** create local resume guidance and a cover-letter draft using known facts.
 - **Apply:** validate the application and hand it to a configured submission gateway.
@@ -28,7 +28,7 @@ Search → Normalize → Parse → Score → Review → Tailor → Apply → Tra
 - Repository classes that isolate persistence from agents
 - Source-independent asynchronous search orchestration
 - In-memory job source for local development and tests
-- Deterministic job parser and explainable baseline match scorer
+- Deterministic job parser and structured, evidence-grounded LLM match scorer
 - Explicit human-review and approval gates before tailoring or submission
 - Local document-draft storage
 - Browser-adapter and optional API boundaries with no live side effects
@@ -90,7 +90,11 @@ Search criteria include:
 | USAJOBS | U.S. federal jobs | API key and registration email |
 | LinkedIn via Apify | LinkedIn public job listings across companies | Enable flag and Apify API token; a compatible Actor ID is provided by default |
 
-Existing Greenhouse, Lever, Workday, and company career-page adapters remain available as optional supplemental sources. They are not required for discovery and are useful only when a direct company feed needs to be added to the broader results. LinkedIn discovery is delegated to an Apify Store Actor; this project does not automate LinkedIn login or manage browser sessions.
+Greenhouse searches use the board tokens accumulated by the company crawler in
+`company_prospects`. Manually configured Greenhouse boards, Lever, Workday, and
+company career-page adapters remain available as supplemental sources. LinkedIn
+discovery is delegated to an Apify Store Actor; this project does not automate
+LinkedIn login or manage browser sessions.
 
 Normalized jobs consistently include source identity, title, company, URL, location, description, detected skills, employment type, salary range, currency, remote status, and posting date. Missing source fields remain `None` or empty rather than being invented.
 
@@ -111,6 +115,40 @@ Page-level crawl history is stored in `crawl_pages`. Each row records the page
 URL, source, page type, last outcome, last and next crawl times, and the most
 recent error. This includes failed board URLs that never become company
 prospects.
+
+### LLM matching
+
+Each distinct normalized job is matched through the OpenAI Responses API after
+parsing. The model receives job evidence plus the candidate's summary,
+preferences, and structured resume knowledge. The prompt deliberately omits the
+candidate's name, email address, resume path, and source job payload. Requests
+use strict structured output and `store=false`; the application validates every
+score before persisting it.
+
+The response contains a holistic score, separate skills/title/location/
+experience/industry scores, matched qualifications, missing qualifications, and
+an evidence-grounded rationale. The score is model-generated rather than a
+fixed weighted formula. Review remains mandatory because model judgments can be
+inconsistent and should not be treated as proof of eligibility.
+
+Configure matching in `.env`:
+
+```env
+OPENAI_API_KEY=your-api-key
+JOB_AGENT_OPENAI_MODEL=gpt-5.6-terra
+JOB_AGENT_OPENAI_REASONING_EFFORT=low
+JOB_AGENT_OPENAI_TIMEOUT_SECONDS=60
+JOB_AGENT_MATCHING_CONCURRENCY=5
+JOB_AGENT_MATCHING_PROMPT=prompts/score_match.txt
+```
+
+`gpt-5.6-terra` is the default balance of quality and cost. The model remains
+configurable without a code change. One API request is made for every distinct
+job being scored, so result count and concurrency directly affect API usage,
+cost, and latency. The search command stops before source requests when
+`OPENAI_API_KEY` is missing. See the official OpenAI documentation for the
+[Responses API](https://developers.openai.com/api/docs/guides/text) and
+[structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
 
 ### Enable and Configure Job Searching
 
@@ -139,7 +177,7 @@ Defining an adapter in the code does not enable it. The source factory creates a
 | `adzuna` | Global discovery | `JOB_AGENT_ADZUNA_APP_ID` and `JOB_AGENT_ADZUNA_APP_KEY` |
 | `remotive` | Global remote discovery | `JOB_AGENT_REMOTIVE_ENABLED=true` |
 | `usajobs` | U.S. federal discovery | `JOB_AGENT_USAJOBS_EMAIL` and `JOB_AGENT_USAJOBS_API_KEY` |
-| `greenhouse` | Supplemental company feed | At least one `Company=board_token` in `JOB_AGENT_GREENHOUSE_BOARDS` |
+| `greenhouse` | Stored company feeds | At least one board token in `company_prospects`, or an optional `Company=board_token` in `JOB_AGENT_GREENHOUSE_BOARDS` |
 | `lever` | Supplemental company feed | At least one `Company=site_name` in `JOB_AGENT_LEVER_SITES` |
 | `workday` | Supplemental company feed | At least one `Company=public_cxs_url` in `JOB_AGENT_WORKDAY_TENANTS` |
 | `career_page` | Supplemental company page | At least one `Company=public_url` in `JOB_AGENT_CAREER_PAGES` |
@@ -180,7 +218,10 @@ Both values are required. This provider searches U.S. federal job announcements 
 
 ##### Greenhouse
 
-Configure a company display name and its board token:
+The normal search command automatically loads all board tokens collected in
+`company_prospects`. No company-specific environment configuration is required
+for crawled boards. To add a board that the crawler has not discovered, configure
+a company display name and its board token:
 
 ```env
 JOB_AGENT_GREENHOUSE_BOARDS=Example Company=example
@@ -191,6 +232,11 @@ The board token is the path segment in `https://boards.greenhouse.io/{board_toke
 ```env
 JOB_AGENT_GREENHOUSE_BOARDS=Company One=companyone;Company Two=companytwo
 ```
+
+Stored boards take precedence when a configured entry uses the same token. Each
+board feed is downloaded once per search run, shared across all title queries,
+and filtered using the normal search criteria. Board requests are concurrency
+limited to avoid opening an unbounded number of connections.
 
 ##### Crawl for Greenhouse companies
 
@@ -356,6 +402,18 @@ Run every enabled provider using the desired titles, locations, and resume knowl
 
 ```bash
 python3 app.py --search
+```
+
+Search only the Greenhouse boards stored in `company_prospects` (plus any
+manually configured additions):
+
+```bash
+python3 app.py --search \
+  --source greenhouse \
+  --title "AI Engineer" \
+  --remote \
+  --remote-country us \
+  --limit 25
 ```
 
 Preview the exact Actor input without requiring an Apify token or sending any request:
@@ -560,7 +618,7 @@ To run Python's built-in test discovery directly with verbose console output, us
 python3 -m unittest discover -s ./tests -p 'test_*.py' -v
 ```
 
-The suite covers resume knowledge, parsing, matching, MySQL job-prospect persistence, the search safety flag, and fixture-based normalization for every Phase 3 source without making network or live-database requests. Repository tests use an injected in-memory MySQL connector fake; use a separate integration environment to validate credentials and server permissions.
+The suite covers resume knowledge, parsing, structured LLM matching, MySQL job-prospect persistence, the search safety flag, and fixture-based normalization for every Phase 3 source without making network or live-database requests. LLM and repository tests use injected fakes; use a separate integration environment to validate API credentials, model access, database credentials, and server permissions.
 
 ## Optional API
 

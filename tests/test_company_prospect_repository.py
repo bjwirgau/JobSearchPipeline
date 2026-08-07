@@ -51,6 +51,11 @@ class CompanyProspectRepositoryTests(unittest.TestCase):
         self.assertEqual(updated.created_at, created.created_at)
         self.assertGreaterEqual(updated.updated_at, created.updated_at)
         self.assertEqual(self.repository.list_all(), (updated,))
+        self.assertEqual(self.repository.list_all(limit=1), (updated,))
+
+    def test_list_all_rejects_a_non_positive_limit(self) -> None:
+        with self.assertRaisesRegex(ValueError, "greater than zero"):
+            self.repository.list_all(limit=0)
 
     def test_rejects_non_greenhouse_company_urls(self) -> None:
         with self.assertRaisesRegex(ValueError, "canonical Greenhouse"):

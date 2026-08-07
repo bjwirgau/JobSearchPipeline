@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 from agents import MatchingAgent, ParserAgent, SearchAgent
@@ -81,8 +82,12 @@ class JobSearchWorkflow:
             f"Parsed {len(parsed_jobs)} jobs",
         )
         matches = tuple(
-            self._matching.score(candidate, job, resume_knowledge)
-            for job in parsed_jobs
+            await asyncio.gather(
+                *(
+                    self._matching.score(candidate, job, resume_knowledge)
+                    for job in parsed_jobs
+                )
+            )
         )
         self._search.store_matches(matches)
         run = run.record(

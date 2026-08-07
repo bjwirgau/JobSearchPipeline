@@ -65,19 +65,20 @@ class CompanyProspectRepository:
             rows = cursor.fetchall()
         return frozenset(str(row["company_url"]) for row in rows)
 
-    def list_all(self, *, limit: int = 100) -> tuple[CompanyProspect, ...]:
-        if limit <= 0:
+    def list_all(self, *, limit: int | None = None) -> tuple[CompanyProspect, ...]:
+        if limit is not None and limit <= 0:
             raise ValueError("limit must be greater than zero")
-        with self._database.cursor() as cursor:
-            cursor.execute(
-                """
+        query = """
                 SELECT company_id, company_name, board_token, company_url,
                        created_at, updated_at
                 FROM company_prospects
                 ORDER BY company_name, board_token
-                LIMIT %s
-                """,
-                (limit,),
-            )
+                """
+        parameters: tuple[object, ...] = ()
+        if limit is not None:
+            query += " LIMIT %s"
+            parameters = (limit,)
+        with self._database.cursor() as cursor:
+            cursor.execute(query, parameters)
             rows = cursor.fetchall()
         return tuple(CompanyProspect.from_row(row) for row in rows)

@@ -102,7 +102,12 @@ class Settings:
     browser_fallback: str = "none"
     http_timeout_seconds: float = 20.0
     http_user_agent: str = "JobAgent/0.3 (+local-job-search)"
-    openai_api_key: str | None = None
+    openai_api_key: str | None = field(default=None, repr=False)
+    openai_model: str = "gpt-5.6-terra"
+    openai_reasoning_effort: str = "low"
+    openai_timeout_seconds: float = 60.0
+    matching_concurrency: int = 5
+    matching_prompt_path: Path = PROJECT_ROOT / "prompts" / "score_match.txt"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
@@ -189,6 +194,27 @@ class Settings:
                 "JobAgent/0.3 (+local-job-search)",
             ),
             openai_api_key=values.get("OPENAI_API_KEY") or None,
+            openai_model=values.get(
+                "JOB_AGENT_OPENAI_MODEL",
+                "gpt-5.6-terra",
+            ).strip(),
+            openai_reasoning_effort=values.get(
+                "JOB_AGENT_OPENAI_REASONING_EFFORT",
+                "low",
+            ).strip().casefold(),
+            openai_timeout_seconds=float(
+                values.get("JOB_AGENT_OPENAI_TIMEOUT_SECONDS", "60")
+            ),
+            matching_concurrency=int(
+                values.get("JOB_AGENT_MATCHING_CONCURRENCY", "5")
+            ),
+            matching_prompt_path=_resolve_path(
+                values.get(
+                    "JOB_AGENT_MATCHING_PROMPT",
+                    "prompts/score_match.txt",
+                ),
+                PROJECT_ROOT,
+            ),
         )
 
     def __post_init__(self) -> None:
@@ -227,6 +253,25 @@ class Settings:
         ):
             raise ValueError(
                 "JOB_AGENT_REMOTE_COUNTRY must be a two-letter country code"
+            )
+        if not self.openai_model:
+            raise ValueError("JOB_AGENT_OPENAI_MODEL must not be empty")
+        if self.openai_reasoning_effort not in {
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+        }:
+            raise ValueError("invalid JOB_AGENT_OPENAI_REASONING_EFFORT")
+        if self.openai_timeout_seconds <= 0:
+            raise ValueError(
+                "JOB_AGENT_OPENAI_TIMEOUT_SECONDS must be greater than zero"
+            )
+        if not 1 <= self.matching_concurrency <= 20:
+            raise ValueError(
+                "JOB_AGENT_MATCHING_CONCURRENCY must be between 1 and 20"
             )
         if bool(self.adzuna_app_id) != bool(self.adzuna_app_key):
             raise ValueError(

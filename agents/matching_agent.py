@@ -1,8 +1,10 @@
-"""Transparent deterministic baseline for candidate/job scoring."""
+"""Evidence-grounded LLM matching for candidate and job records."""
 
 from __future__ import annotations
 
-import re
+import asyncio
+import json
+from typing import Any, Mapping
 
 from models import (
     CandidateProfile,
@@ -11,110 +13,200 @@ from models import (
     MatchResult,
     ResumeKnowledgeBase,
 )
-from utils.text import normalize_text, tokenize
+from services import LLMService
+from utils.text import normalize_text
 
 
-YEARS_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\+?\s*(?:years?|yrs?)", re.IGNORECASE)
+MATCH_SCHEMA: Mapping[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "breakdown": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "skills": {"type": "number", "minimum": 0, "maximum": 1},
+                "title": {"type": "number", "minimum": 0, "maximum": 1},
+                "location": {"type": "number", "minimum": 0, "maximum": 1},
+                "experience": {"type": "number", "minimum": 0, "maximum": 1},
+                "industry": {"type": "number", "minimum": 0, "maximum": 1},
+            },
+            "required": ["skills", "title", "location", "experience", "industry"],
+        },
+        "matched_skills": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "missing_skills": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "rationale": {"type": "string", "minLength": 1, "maxLength": 1_200},
+    },
+    "required": [
+        "score",
+        "breakdown",
+        "matched_skills",
+        "missing_skills",
+        "rationale",
+    ],
+}
+
+PROMPT_FIELDS = ("candidate_profile", "resume_knowledge", "job_posting")
+
+
+class InvalidMatchResponseError(ValueError):
+    pass
 
 
 class MatchingAgent:
-    def score(
+    def __init__(
+        self,
+        *,
+        llm: LLMService,
+        prompt_template: str,
+        concurrency: int = 5,
+    ) -> None:
+        if concurrency <= 0:
+            raise ValueError("matching concurrency must be greater than zero")
+        missing_fields = [
+            field for field in PROMPT_FIELDS if "{" + field + "}" not in prompt_template
+        ]
+        if missing_fields:
+            raise ValueError(
+                "match prompt is missing placeholders: " + ", ".join(missing_fields)
+            )
+        self._llm = llm
+        self._prompt_template = prompt_template
+        self._request_limit = asyncio.Semaphore(concurrency)
+
+    async def score(
         self,
         candidate: CandidateProfile,
         job: JobPosting,
         resume_knowledge: ResumeKnowledgeBase | None = None,
     ) -> MatchResult:
-        candidate_skills = {normalize_text(skill): skill for skill in candidate.skills}
-        if resume_knowledge:
-            for skill in resume_knowledge.all_skills:
-                candidate_skills.setdefault(normalize_text(skill), skill)
-        required_skills = {normalize_text(skill): skill for skill in job.skills}
-        matched_keys = candidate_skills.keys() & required_skills.keys()
-        missing_keys = required_skills.keys() - candidate_skills.keys()
-        skill_score = len(matched_keys) / len(required_skills) if required_skills else 0.5
-
-        desired_title_tokens = set(tokenize(" ".join(candidate.desired_titles)))
-        job_title_tokens = set(tokenize(job.title))
-        title_score = (
-            len(desired_title_tokens & job_title_tokens) / len(job_title_tokens)
-            if desired_title_tokens and job_title_tokens
-            else 0.5
-        )
-
-        desired_locations = tuple(normalize_text(value) for value in candidate.desired_locations)
-        if job.is_remote and candidate.remote_preference in {"remote", "flexible"}:
-            location_score = 1.0
-        elif desired_locations:
-            location = normalize_text(job.location)
-            location_score = 1.0 if any(value in location for value in desired_locations) else 0.0
-        else:
-            location_score = 0.5
-
-        requirements_text = " ".join(job.requirements)
-        years_match = YEARS_PATTERN.search(requirements_text)
-        required_years = float(years_match.group(1)) if years_match else None
-        experience_years = candidate.years_experience
-        if resume_knowledge and required_years:
-            relevant_years = tuple(
-                years
-                for key in matched_keys
-                if (years := resume_knowledge.years_for(required_skills[key])) is not None
+        prompt = self._render_prompt(candidate, job, resume_knowledge)
+        async with self._request_limit:
+            response = await self._llm.generate_structured(
+                prompt,
+                schema=MATCH_SCHEMA,
             )
-            if relevant_years:
-                experience_years = max(relevant_years)
-        experience_score = (
-            min(experience_years / required_years, 1.0)
-            if required_years and required_years > 0
-            else 1.0
-        )
+        return self._to_match_result(candidate, job, resume_knowledge, response)
 
-        required_industries = {normalize_text(value): value for value in job.industries}
-        candidate_industries = {
-            normalize_text(value): value
-            for value in (resume_knowledge.industries if resume_knowledge else ())
+    def _render_prompt(
+        self,
+        candidate: CandidateProfile,
+        job: JobPosting,
+        resume_knowledge: ResumeKnowledgeBase | None,
+    ) -> str:
+        evidence = {
+            "summary": candidate.summary,
+            "skills": list(candidate.skills),
+            "years_experience": candidate.years_experience,
+            "current_location": candidate.location,
+            "desired_titles": list(candidate.desired_titles),
+            "desired_locations": list(candidate.desired_locations),
+            "remote_preference": candidate.remote_preference,
         }
-        industry_score = (
-            len(required_industries.keys() & candidate_industries.keys())
-            / len(required_industries)
-            if required_industries
-            else 0.5
-        )
+        knowledge: Mapping[str, object] = {}
+        if resume_knowledge is not None:
+            knowledge = {
+                "skills": list(resume_knowledge.skills),
+                "years": dict(resume_knowledge.years),
+                "industries": list(resume_knowledge.industries),
+                "roles": [role.to_dict() for role in resume_knowledge.roles],
+                "achievements": list(resume_knowledge.achievements),
+                "certifications": list(resume_knowledge.certifications),
+                "education": list(resume_knowledge.education),
+            }
+        job_evidence = {
+            "title": job.title,
+            "company": job.company,
+            "location": job.location,
+            "description": job.description,
+            "skills": list(job.skills),
+            "industries": list(job.industries),
+            "responsibilities": list(job.responsibilities),
+            "requirements": list(job.requirements),
+            "employment_type": job.employment_type,
+            "salary_min": job.salary_min,
+            "salary_max": job.salary_max,
+            "salary_currency": job.salary_currency,
+            "is_remote": job.is_remote,
+            "remote_country_codes": list(job.remote_country_codes),
+        }
+        rendered = self._prompt_template
+        replacements = {
+            "candidate_profile": evidence,
+            "resume_knowledge": knowledge,
+            "job_posting": job_evidence,
+        }
+        for field, value in replacements.items():
+            rendered = rendered.replace(
+                "{" + field + "}",
+                json.dumps(value, indent=2, ensure_ascii=False, sort_keys=True),
+            )
+        return rendered
+
+    @staticmethod
+    def _to_match_result(
+        candidate: CandidateProfile,
+        job: JobPosting,
+        resume_knowledge: ResumeKnowledgeBase | None,
+        response: Mapping[str, Any],
+    ) -> MatchResult:
+        breakdown_value = response.get("breakdown")
+        if not isinstance(breakdown_value, Mapping):
+            raise InvalidMatchResponseError("match breakdown must be an object")
         breakdown = MatchBreakdown(
-            skills=skill_score,
-            title=title_score,
-            location=location_score,
-            experience=experience_score,
-            industry=industry_score,
+            skills=_score(breakdown_value, "skills"),
+            title=_score(breakdown_value, "title"),
+            location=_score(breakdown_value, "location"),
+            experience=_score(breakdown_value, "experience"),
+            industry=_score(breakdown_value, "industry"),
         )
-        base_total = (
-            skill_score * 0.50
-            + title_score * 0.25
-            + location_score * 0.15
-            + experience_score * 0.10
-        )
-        total = base_total * 0.90 + industry_score * 0.10 if required_industries else base_total
-        matched = tuple(required_skills[key] for key in sorted(matched_keys))
-        missing = tuple(required_skills[key] for key in sorted(missing_keys))
+        matched_skills = _strings(response, "matched_skills")
+        missing_skills = _strings(response, "missing_skills")
+        rationale = response.get("rationale")
+        if not isinstance(rationale, str) or not rationale.strip():
+            raise InvalidMatchResponseError("match rationale must not be empty")
         skill_years = {
-            required_skills[key]: years
-            for key in sorted(matched_keys)
+            skill: years
+            for skill in matched_skills
             if resume_knowledge
-            and (years := resume_knowledge.years_for(required_skills[key])) is not None
+            and (years := resume_knowledge.years_for(skill)) is not None
         }
-        industry_detail = (
-            f", industry fit {industry_score:.0%}" if required_industries else ""
-        )
         return MatchResult(
             candidate_id=candidate.candidate_id,
             job_id=job.job_id,
-            score=round(total, 4),
+            score=round(_score(response, "score"), 4),
             breakdown=breakdown,
-            matched_skills=matched,
-            missing_skills=missing,
+            matched_skills=matched_skills,
+            missing_skills=missing_skills,
             skill_years=skill_years,
-            rationale=(
-                f"Matched {len(matched)} of {len(required_skills)} identified skills; "
-                f"title fit {title_score:.0%}, location fit {location_score:.0%}"
-                f"{industry_detail}."
-            ),
+            rationale=rationale.strip(),
         )
+
+
+def _score(value: Mapping[str, Any], field: str) -> float:
+    raw_score = value.get(field)
+    if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)):
+        raise InvalidMatchResponseError(f"{field} score must be numeric")
+    score = float(raw_score)
+    if not 0 <= score <= 1:
+        raise InvalidMatchResponseError(f"{field} score must be between 0 and 1")
+    return score
+
+
+def _strings(value: Mapping[str, Any], field: str) -> tuple[str, ...]:
+    items = value.get(field)
+    if not isinstance(items, list) or any(not isinstance(item, str) for item in items):
+        raise InvalidMatchResponseError(f"{field} must be an array of strings")
+    unique: dict[str, str] = {}
+    for item in items:
+        cleaned = item.strip()
+        if cleaned:
+            unique.setdefault(normalize_text(cleaned), cleaned)
+    return tuple(unique.values())

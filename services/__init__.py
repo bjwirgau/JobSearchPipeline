@@ -18,7 +18,15 @@ from .http_service import (
 from .job_normalization_service import JobNormalizer
 from .job_source_factory import build_job_sources
 from .job_source_service import InMemoryJobSource, JobSourceService
-from .llm_service import LLMService
+from .llm_service import (
+    DisabledLLMService,
+    LLMNotConfiguredError,
+    LLMResponseError,
+    LLMService,
+    MissingOpenAIDependencyError,
+    OpenAIConfig,
+    OpenAILLMService,
+)
 from .notification_service import LoggingNotificationService, NotificationService
 from .resume_knowledge_service import ResumeKnowledgeError, ResumeKnowledgeService
 
@@ -35,9 +43,15 @@ __all__ = [
     "InMemoryJobSource",
     "JobSourceService",
     "JobNormalizer",
+    "DisabledLLMService",
+    "LLMNotConfiguredError",
+    "LLMResponseError",
     "LLMService",
     "LoggingNotificationService",
     "NotificationService",
+    "MissingOpenAIDependencyError",
+    "OpenAIConfig",
+    "OpenAILLMService",
     "ResumeKnowledgeError",
     "ResumeKnowledgeService",
     "RequestsHttpClient",

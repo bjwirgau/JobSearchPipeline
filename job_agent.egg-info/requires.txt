@@ -1,4 +1,5 @@
 mysql-connector-python<10,>=9.7
+openai<3,>=2.47
 
 [api]
 fastapi>=0.115

@@ -193,6 +193,9 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((job.salary_min, job.salary_max), (140000, 180000))
         self.assertTrue(job.is_remote)
 
+        await source.search(replace(self.query, title="Platform Engineer"), limit=10)
+        self.assertEqual(len(self.http.calls), 1)
+
     async def test_lever_normalizes_structured_salary_and_employment(self) -> None:
         url = "https://api.lever.co/v0/postings/example"
         self.http.add("GET", url, "lever.json", "application/json")
@@ -374,6 +377,16 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(settings.linkedin_enabled)
         self.assertNotIn("linkedin", tuple(source.name for source in sources))
+
+    def test_source_factory_builds_greenhouse_from_persisted_boards(self) -> None:
+        settings = Settings.from_env({})
+
+        sources = build_job_sources(
+            settings,
+            greenhouse_boards=(GreenhouseBoard("Stored Company", "stored"),),
+        )
+
+        self.assertIn("greenhouse", tuple(source.name for source in sources))
 
 
 if __name__ == "__main__":

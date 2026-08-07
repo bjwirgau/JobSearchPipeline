@@ -269,11 +269,12 @@ class FakeMySQLCursor:
                 row = self._connection.tables["company_prospects"].get(values[0])
                 self._rows = [dict(row)] if row else []
                 return
-            limit = int(values[0])
             rows = sorted(
                 self._connection.tables["company_prospects"].values(),
                 key=lambda row: (row["company_name"], row["board_token"]),
-            )[:limit]
+            )
+            if values:
+                rows = rows[: int(values[0])]
             self._rows = [dict(row) for row in rows]
             return
         if statement.startswith("select page_url") and "from crawl_pages" in statement:

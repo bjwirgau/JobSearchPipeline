@@ -74,6 +74,25 @@ class CountryEligibilityTests(unittest.TestCase):
                 {"JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS": "0"}
             )
 
+    def test_openai_matching_settings_are_validated(self) -> None:
+        settings = Settings.from_env(
+            {
+                "OPENAI_API_KEY": "secret",
+                "JOB_AGENT_OPENAI_MODEL": "gpt-5.6-terra",
+                "JOB_AGENT_OPENAI_REASONING_EFFORT": "medium",
+                "JOB_AGENT_OPENAI_TIMEOUT_SECONDS": "45",
+                "JOB_AGENT_MATCHING_CONCURRENCY": "3",
+            }
+        )
+
+        self.assertEqual(settings.openai_model, "gpt-5.6-terra")
+        self.assertEqual(settings.openai_reasoning_effort, "medium")
+        self.assertEqual(settings.openai_timeout_seconds, 45)
+        self.assertEqual(settings.matching_concurrency, 3)
+        self.assertNotIn("secret", repr(settings))
+        with self.assertRaisesRegex(ValueError, "MATCHING_CONCURRENCY"):
+            Settings.from_env({"JOB_AGENT_MATCHING_CONCURRENCY": "21"})
+
 
 if __name__ == "__main__":
     unittest.main()

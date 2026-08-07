@@ -15,6 +15,7 @@ from typing import Sequence
 from agents import (
     CompanyCrawlerDisabledError,
     GreenhouseCompanyCrawler,
+    InvalidMatchResponseError,
     MatchingAgent,
     ParserAgent,
     SearchAgent,
@@ -38,9 +39,13 @@ from repositories import (
 )
 from services import (
     CompanyDiscoveryError,
+    DisabledLLMService,
     GreenhouseCdxDiscovery,
     GreenhousePublicBoardLookup,
     LoggingNotificationService,
+    LLMResponseError,
+    OpenAIConfig,
+    OpenAILLMService,
     RequestsHttpClient,
     ResumeKnowledgeError,
     ResumeKnowledgeService,
@@ -48,7 +53,7 @@ from services import (
     build_job_sources,
 )
 from services.http_service import HttpRequestError
-from services.job_sources import LinkedInJobSource
+from services.job_sources import GreenhouseBoard, LinkedInJobSource
 from utils.logging import configure_logging
 from workflows import JobSearchWorkflow
 
@@ -121,6 +126,10 @@ def build_container(settings: Settings | None = None) -> JobAgentContainer:
     job_sources = build_job_sources(
         settings,
         skill_vocabulary=skill_vocabulary,
+        greenhouse_boards=tuple(
+            GreenhouseBoard(prospect.company_name, prospect.board_token)
+            for prospect in company_prospects.list_all()
+        ),
     )
 
     search_agent = SearchAgent(
@@ -129,7 +138,23 @@ def build_container(settings: Settings | None = None) -> JobAgentContainer:
         enabled=settings.search_enabled,
     )
     parser_agent = ParserAgent()
-    matching_agent = MatchingAgent()
+    llm = (
+        OpenAILLMService(
+            OpenAIConfig(
+                api_key=settings.openai_api_key,
+                model=settings.openai_model,
+                reasoning_effort=settings.openai_reasoning_effort,
+                timeout_seconds=settings.openai_timeout_seconds,
+            )
+        )
+        if settings.openai_api_key
+        else DisabledLLMService()
+    )
+    matching_agent = MatchingAgent(
+        llm=llm,
+        prompt_template=settings.matching_prompt_path.read_text(encoding="utf-8"),
+        concurrency=settings.matching_concurrency,
+    )
     return JobAgentContainer(
         settings=settings,
         database=database,
@@ -401,6 +426,11 @@ async def _run_search(
     container: JobAgentContainer,
     arguments: argparse.Namespace,
 ) -> int:
+    if not container.settings.openai_api_key:
+        logging.getLogger(__name__).error(
+            "Job matching requires OPENAI_API_KEY to be configured"
+        )
+        return 1
     candidate = _load_candidate(container.settings.candidate_profile_path)
     knowledge = container.resume_knowledge_service.load()
     criteria = _search_criteria(arguments, candidate, knowledge)
@@ -410,7 +440,11 @@ async def _run_search(
     )
     selected_sources = container.job_search_workflow.selected_source_names(criteria)
     print(_format_searched_sources(selected_sources), flush=True)
-    result = await container.job_search_workflow.run(candidate, criteria, knowledge)
+    try:
+        result = await container.job_search_workflow.run(candidate, criteria, knowledge)
+    except (InvalidMatchResponseError, LLMResponseError) as error:
+        logging.getLogger(__name__).error("Job matching failed: %s", error)
+        return 1
     ranked = sorted(
         zip(result.jobs, result.matches),
         key=lambda item: item[1].score,

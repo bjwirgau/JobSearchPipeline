@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import replace
+from typing import Any, Mapping
 
 from agents import (
     MatchingAgent,
@@ -18,6 +19,34 @@ from repositories import JobProspectRepository
 from services import InMemoryJobSource, LoggingNotificationService
 from tests.mysql_fakes import FakeMySQLServer
 from workflows import JobSearchWorkflow
+
+
+MATCH_PROMPT = "{candidate_profile}\n{resume_knowledge}\n{job_posting}"
+
+
+class StaticMatchLLM:
+    async def generate_text(self, prompt: str) -> str:
+        raise AssertionError("matching must use structured output")
+
+    async def generate_structured(
+        self,
+        prompt: str,
+        *,
+        schema: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        return {
+            "score": 0.88,
+            "breakdown": {
+                "skills": 1.0,
+                "title": 1.0,
+                "location": 1.0,
+                "experience": 0.7,
+                "industry": 0.5,
+            },
+            "matched_skills": ["Python"],
+            "missing_skills": [],
+            "rationale": "Strong evidence for this role.",
+        }
 
 
 class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
@@ -84,7 +113,10 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
         workflow = JobSearchWorkflow(
             search_agent=search_agent,
             parser_agent=ParserAgent(),
-            matching_agent=MatchingAgent(),
+            matching_agent=MatchingAgent(
+                llm=StaticMatchLLM(),
+                prompt_template=MATCH_PROMPT,
+            ),
             notifications=LoggingNotificationService(),
         )
 

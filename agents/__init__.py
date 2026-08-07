@@ -9,7 +9,7 @@ from .company_crawler import (
 
 from .apply_agent import ApplyAgent, ApplicationSubmissionDisabledError
 from .cover_letter_agent import CoverLetterAgent
-from .matching_agent import MatchingAgent
+from .matching_agent import InvalidMatchResponseError, MatchingAgent
 from .parser_agent import ParserAgent
 from .search_agent import SearchAgent, SearchDisabledError, SearchQueryBuilder
 from .tailoring_agent import TailoringAgent
@@ -23,6 +23,7 @@ __all__ = [
     "CompanyCrawlResult",
     "CoverLetterAgent",
     "GreenhouseCompanyCrawler",
+    "InvalidMatchResponseError",
     "MatchingAgent",
     "ParserAgent",
     "SearchAgent",
