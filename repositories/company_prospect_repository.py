@@ -73,6 +73,7 @@ class CompanyProspectRepository:
                 SELECT company_id, company_name, board_token, company_url,
                        last_job_search_at, created_at, updated_at
                 FROM company_prospects
+                WHERE company_url LIKE 'https://job-boards.greenhouse.io/%'
                 ORDER BY company_name, board_token
                 """
         parameters: tuple[object, ...] = ()
@@ -94,6 +95,7 @@ class CompanyProspectRepository:
                 SELECT company_id, company_name, board_token, company_url,
                        last_job_search_at, created_at, updated_at
                 FROM company_prospects
+                WHERE company_url LIKE 'https://job-boards.greenhouse.io/%'
                 ORDER BY (last_job_search_at IS NOT NULL), last_job_search_at,
                          company_name, board_token
                 LIMIT %s

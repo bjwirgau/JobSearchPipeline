@@ -54,10 +54,6 @@ class FakeDiscoveryHttpClient:
                 "boards.greenhouse.io": (
                     "https://boards.greenhouse.io/example/jobs/456",
                 ),
-                "job-boards.eu.greenhouse.io": (
-                    "https://job-boards.eu.greenhouse.io/europe/jobs/789",
-                ),
-                "boards.eu.greenhouse.io": (),
             }[host]
             text = "\n".join(json.dumps({"url": item}) for item in urls)
         return HttpResponse(200, url, text, {"Content-Type": "application/json"})
@@ -128,11 +124,7 @@ class FakeFallbackDiscoveryHttpClient(FakeDiscoveryHttpClient):
             "job-boards.greenhouse.io": (
                 "https://job-boards.greenhouse.io/example",
             ),
-            "job-boards.eu.greenhouse.io": (
-                "https://job-boards.eu.greenhouse.io/europe",
-            ),
             "boards.greenhouse.io": (),
-            "boards.eu.greenhouse.io": (),
         }[host]
         payload: list[list[str]] = [["original"]]
         payload.extend([[item] for item in urls])
@@ -216,7 +208,7 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
         self.repository = CompanyProspectRepository(database)
         self.crawl_pages = CrawlPageRepository(database)
 
-    async def test_archive_discovers_and_deduplicates_us_and_eu_boards(self) -> None:
+    async def test_archive_discovers_and_deduplicates_us_boards(self) -> None:
         http = FakeDiscoveryHttpClient()
         discovery = GreenhouseCdxDiscovery(
             http=http,
@@ -230,16 +222,12 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
             candidates,
             (
                 GreenhouseBoardCandidate(
-                    board_token="europe",
-                    company_url="https://job-boards.eu.greenhouse.io/europe",
-                ),
-                GreenhouseBoardCandidate(
                     board_token="example",
                     company_url="https://job-boards.greenhouse.io/example",
                 ),
             ),
         )
-        self.assertEqual(len(http.calls), 4)
+        self.assertEqual(len(http.calls), 2)
         self.assertTrue(
             all(call[1]["limit"] == 500 for call in http.calls)
         )
@@ -258,10 +246,6 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
             candidates,
             (
                 GreenhouseBoardCandidate(
-                    board_token="europe",
-                    company_url="https://job-boards.eu.greenhouse.io/europe",
-                ),
-                GreenhouseBoardCandidate(
                     board_token="example",
                     company_url="https://job-boards.greenhouse.io/example",
                 ),
@@ -272,7 +256,7 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
             for call in http.calls
             if call[0] == discovery.INTERNET_ARCHIVE_INDEX_URL
         ]
-        self.assertEqual(len(archive_calls), 4)
+        self.assertEqual(len(archive_calls), 2)
         self.assertTrue(
             all("[^/?]+" in call[1]["filter"] for call in archive_calls)
         )
@@ -301,14 +285,14 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             {candidate.board_token for candidate in candidates},
-            {"example", "europe"},
+            {"example"},
         )
         self.assertEqual(
             sum(
                 call[0] == discovery.INTERNET_ARCHIVE_INDEX_URL
                 for call in http.calls
             ),
-            8,
+            4,
         )
         self.assertTrue(
             any(call[0].endswith("collinfo.json") for call in http.calls)
@@ -326,14 +310,14 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             {candidate.board_token for candidate in candidates},
-            {"example", "europe"},
+            {"example"},
         )
         self.assertEqual(
             sum(
                 call[0] == discovery.INTERNET_ARCHIVE_INDEX_URL
                 for call in http.calls
             ),
-            5,
+            3,
         )
 
     async def test_fallback_keeps_results_when_one_archive_host_fails(self) -> None:
@@ -350,7 +334,7 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             {candidate.board_token for candidate in candidates},
-            {"example", "europe"},
+            {"example"},
         )
 
     async def test_greenhouse_lookup_uses_public_board_metadata(self) -> None:
@@ -367,22 +351,6 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             http.calls[0][0],
             "https://boards-api.greenhouse.io/v1/boards/example",
-        )
-
-    async def test_eu_board_lookup_uses_standard_public_api_host(self) -> None:
-        http = FakeBoardHttpClient()
-        lookup = GreenhousePublicBoardLookup(http=http)
-        candidate = GreenhouseBoardCandidate(
-            board_token="example-eu",
-            company_url="https://job-boards.eu.greenhouse.io/example-eu",
-        )
-
-        company = await lookup.retrieve(candidate)
-
-        self.assertEqual(company.company_name, "Example Company")
-        self.assertEqual(
-            http.calls[0][0],
-            "https://boards-api.greenhouse.io/v1/boards/example-eu",
         )
 
     async def test_crawler_prioritizes_and_inserts_new_companies(self) -> None:

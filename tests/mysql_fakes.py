@@ -339,9 +339,17 @@ class FakeMySQLCursor:
                 row = self._connection.tables["company_prospects"].get(values[0])
                 self._rows = [dict(row)] if row else []
                 return
+            candidates = tuple(
+                row
+                for row in self._connection.tables["company_prospects"].values()
+                if "company_url like" not in statement
+                or row["company_url"].startswith(
+                    "https://job-boards.greenhouse.io/"
+                )
+            )
             if "order by (last_job_search_at is not null)" in statement:
                 rows = sorted(
-                    self._connection.tables["company_prospects"].values(),
+                    candidates,
                     key=lambda row: (
                         row.get("last_job_search_at") is not None,
                         row.get("last_job_search_at"),
@@ -351,7 +359,7 @@ class FakeMySQLCursor:
                 )
             else:
                 rows = sorted(
-                    self._connection.tables["company_prospects"].values(),
+                    candidates,
                     key=lambda row: (row["company_name"], row["board_token"]),
                 )
             if values:

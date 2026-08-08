@@ -47,9 +47,7 @@ class GreenhouseCdxDiscovery:
     ARCHIVE_REQUEST_ATTEMPTS = 2
     BOARD_HOSTS = (
         "job-boards.greenhouse.io",
-        "job-boards.eu.greenhouse.io",
         "boards.greenhouse.io",
-        "boards.eu.greenhouse.io",
     )
 
     def __init__(
@@ -303,13 +301,10 @@ def _candidate_from_url(url: str) -> GreenhouseBoardCandidate | None:
     board_token = unquote(path_parts[0]).strip().casefold()
     if not _valid_board_token(board_token):
         return None
-    is_eu = ".eu.greenhouse.io" in host
-    canonical_host = (
-        "job-boards.eu.greenhouse.io"
-        if is_eu
-        else "job-boards.greenhouse.io"
+    company_url = (
+        "https://job-boards.greenhouse.io/"
+        f"{quote(board_token, safe='-_.~')}"
     )
-    company_url = f"https://{canonical_host}/{quote(board_token, safe='-_.~')}"
     return GreenhouseBoardCandidate(
         board_token=board_token,
         company_url=company_url,

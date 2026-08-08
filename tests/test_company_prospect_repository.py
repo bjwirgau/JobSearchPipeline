@@ -12,9 +12,10 @@ from tests.mysql_fakes import FakeMySQLServer
 
 class CompanyProspectRepositoryTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.server = FakeMySQLServer()
         database = Database(
             MySQLConfig(),
-            connect_factory=FakeMySQLServer().connect,
+            connect_factory=self.server.connect,
         )
         initialize_schema(database)
         self.repository = CompanyProspectRepository(database)
@@ -91,6 +92,19 @@ class CompanyProspectRepositoryTests(unittest.TestCase):
                 board_token="example",
                 company_url="https://example.com/jobs",
             )
+    def test_search_batches_exclude_historical_non_us_boards(self) -> None:
+        self.server.tables["company_prospects"]["historical-non-us"] = {
+            "company_id": "historical-non-us",
+            "company_name": "Historical Unsupported Board",
+            "board_token": "unsupported",
+            "company_url": "https://unsupported.greenhouse.io/unsupported",
+            "last_job_search_at": None,
+            "created_at": None,
+            "updated_at": None,
+        }
+
+        self.assertEqual(self.repository.list_all(), ())
+        self.assertEqual(self.repository.reserve_for_job_search(limit=10), ())
 
 
 if __name__ == "__main__":

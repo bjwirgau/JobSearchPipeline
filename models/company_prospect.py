@@ -13,7 +13,6 @@ from utils.hashing import stable_hash
 
 GREENHOUSE_BOARD_HOSTS = {
     "job-boards.greenhouse.io",
-    "job-boards.eu.greenhouse.io",
 }
 
 

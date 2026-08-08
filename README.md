@@ -263,7 +263,7 @@ for one command with `--greenhouse-board-limit`.
 
 ##### Crawl for Greenhouse companies
 
-The company crawler queries the Internet Archive CDX index for public US and EU
+The company crawler queries the Internet Archive CDX index only for public US
 Greenhouse board URLs. If that public index is unavailable, discovery falls
 back to the latest Common Crawl URL index. It extracts and deduplicates board
 tokens, then validates each candidate through Greenhouse's public Job Board
