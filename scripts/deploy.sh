@@ -7,8 +7,10 @@ project_root="/opt/job-agent"
 deploy_lock="/tmp/job-agent-deploy.lock"
 crawler_lock="/tmp/job-agent-greenhouse-crawler.lock"
 prospect_search_lock="/tmp/job-agent-greenhouse-prospect-search.lock"
+job_matcher_lock="/tmp/job-agent-job-matcher.lock"
 crawler_lock_acquired=0
 prospect_search_lock_acquired=0
+job_matcher_lock_acquired=0
 
 if [ "${#commit_sha}" -ne 40 ]; then
     echo "A 40-character Git commit SHA is required."
@@ -28,6 +30,10 @@ if ! mkdir "$deploy_lock" 2>/dev/null; then
 fi
 
 cleanup() {
+    if [ "$job_matcher_lock_acquired" -eq 1 ]; then
+        rm -f "$job_matcher_lock/pid"
+        rmdir "$job_matcher_lock" 2>/dev/null || true
+    fi
     if [ "$prospect_search_lock_acquired" -eq 1 ]; then
         rm -f "$prospect_search_lock/pid"
         rmdir "$prospect_search_lock" 2>/dev/null || true
@@ -67,6 +73,20 @@ done
 
 prospect_search_lock_acquired=1
 printf '%s\n' "$$" >"$prospect_search_lock/pid"
+
+# Prevent the minute-based matcher from importing files during checkout.
+attempt=0
+while ! mkdir "$job_matcher_lock" 2>/dev/null; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 120 ]; then
+        echo "Timed out waiting for the job matcher."
+        exit 1
+    fi
+    sleep 5
+done
+
+job_matcher_lock_acquired=1
+printf '%s\n' "$$" >"$job_matcher_lock/pid"
 
 cd "$project_root"
 

@@ -11,6 +11,7 @@ from app import (
     _format_apify_dry_run,
     _format_company_grid,
     _format_job_grid,
+    _format_search_job_grid,
     _format_searched_sources,
     _search_criteria,
 )
@@ -141,6 +142,10 @@ class ApplicationCriteriaTests(unittest.TestCase):
         line_lengths = {len(line) for line in grid.splitlines()}
         self.assertEqual(len(line_lengths), 1)
 
+        search_grid = _format_search_job_grid((job,))
+        self.assertIn("Title", search_grid)
+        self.assertNotIn("Match", search_grid)
+
     def test_all_selected_sources_are_displayed(self) -> None:
         output = _format_searched_sources(("adzuna", "remotive", "usajobs"))
 
@@ -163,19 +168,28 @@ class ApplicationCriteriaTests(unittest.TestCase):
                 ["--search", "--crawl-greenhouse-companies"],
                 settings=self.settings,
             )
-        self.assertIn("cannot be combined with --search", errors.getvalue())
+        self.assertIn("cannot be combined", errors.getvalue())
 
-    def test_unmatched_only_is_limited_to_search(self) -> None:
+    def test_prospect_matching_is_a_separate_rate_limited_command(self) -> None:
         arguments = _arguments(
-            ["--search", "--source", "greenhouse", "--unmatched-only"],
+            ["--match-prospects", "--match-limit", "15"],
             settings=self.settings,
         )
 
-        self.assertTrue(arguments.unmatched_only)
+        self.assertTrue(arguments.match_prospects)
+        self.assertEqual(arguments.match_limit, 15)
         errors = io.StringIO()
         with redirect_stderr(errors), self.assertRaises(SystemExit):
-            _arguments(["--unmatched-only"], settings=self.settings)
-        self.assertIn("--unmatched-only requires --search", errors.getvalue())
+            _arguments(["--search", "--match-prospects"], settings=self.settings)
+        self.assertIn("cannot be combined", errors.getvalue())
+
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            _arguments(
+                ["--match-prospects", "--match-limit", "16"],
+                settings=self.settings,
+            )
+        self.assertIn("between 1 and 15", errors.getvalue())
 
     def test_company_crawler_results_render_as_a_named_grid(self) -> None:
         grid = _format_company_grid(

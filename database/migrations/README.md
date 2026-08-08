@@ -9,3 +9,5 @@ The complete MySQL schema for new databases is defined in `database/schema.py`. 
   timestamps to job prospects.
 - `005_company_prospects.sql` adds Greenhouse company discovery persistence.
 - `006_crawl_pages.sql` adds page-level crawl history and revisit eligibility.
+- `007_job_prospect_payload.sql` stores normalized job evidence for asynchronous
+  LLM matching.

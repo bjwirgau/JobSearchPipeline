@@ -53,10 +53,11 @@ class DatabaseTests(unittest.TestCase):
         self.assertFalse(self.server.resume_candidate_foreign_key)
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {2, 6},
+            {2, 7},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)
+        self.assertIn("job_data", self.server.job_prospect_columns)
 
     def test_version_three_schema_adds_job_prospect_timestamps(self) -> None:
         self.server.tables = {
@@ -94,13 +95,15 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {3, 6},
+            {3, 7},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)
+        self.assertIn("job_data", self.server.job_prospect_columns)
         migrated = self.server.tables["job_prospects"]["existing-job"]
         self.assertIsNotNone(migrated["created_at"])
         self.assertIsNotNone(migrated["updated_at"])
+        self.assertIsNone(migrated["job_data"])
 
     def test_failed_transaction_rolls_back_and_closes(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "stop transaction"):

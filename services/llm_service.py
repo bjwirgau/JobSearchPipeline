@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Protocol
+from typing import Any, Awaitable, Callable, Mapping, Protocol
+
+
+GEMINI_REQUESTS_PER_MINUTE = 15
 
 
 class LLMService(Protocol):
@@ -53,7 +58,14 @@ class GeminiConfig:
 class GeminiLLMService:
     """Generate model output through the asynchronous Gemini Developer API."""
 
-    def __init__(self, config: GeminiConfig, *, client: Any | None = None) -> None:
+    def __init__(
+        self,
+        config: GeminiConfig,
+        *,
+        client: Any | None = None,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
         self._config = config
         if client is None:
             try:
@@ -70,8 +82,14 @@ class GeminiLLMService:
                 ),
             ).aio
         self._client = client
+        self._clock = clock
+        self._sleep = sleep
+        self._request_interval_seconds = 60 / GEMINI_REQUESTS_PER_MINUTE
+        self._last_request_started: float | None = None
+        self._rate_limit_lock = asyncio.Lock()
 
     async def generate_text(self, prompt: str) -> str:
+        await self._wait_for_request_slot()
         try:
             response = await self._client.models.generate_content(
                 model=self._config.model,
@@ -88,6 +106,7 @@ class GeminiLLMService:
         *,
         schema: Mapping[str, Any],
     ) -> Mapping[str, Any]:
+        await self._wait_for_request_slot()
         try:
             response = await self._client.models.generate_content(
                 model=self._config.model,
@@ -108,6 +127,17 @@ class GeminiLLMService:
         if not isinstance(value, Mapping):
             raise LLMResponseError("Gemini structured output must be an object")
         return value
+
+    async def _wait_for_request_slot(self) -> None:
+        async with self._rate_limit_lock:
+            now = self._clock()
+            if self._last_request_started is not None:
+                delay = self._request_interval_seconds - (
+                    now - self._last_request_started
+                )
+                if delay > 0:
+                    await self._sleep(delay)
+            self._last_request_started = self._clock()
 
     def _request_error(self, error: Exception) -> str:
         detail = str(error).strip().replace(self._config.api_key, "[REDACTED]")

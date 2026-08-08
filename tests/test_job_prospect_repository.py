@@ -33,6 +33,7 @@ class JobProspectRepositoryTests(unittest.TestCase):
             salary_currency="USD",
         )
         self.assertEqual(self.repository.save_jobs((job,)), 1)
+        self.assertEqual(self.repository.list_unmatched_jobs(), (job,))
         self.assertEqual(self.repository.matched_job_ids((job.job_id,)), frozenset())
         created = self.repository.get(job.job_id)
         self.assertIsNotNone(created)
@@ -57,6 +58,7 @@ class JobProspectRepositoryTests(unittest.TestCase):
             ),
         )
         self.assertEqual(self.repository.update_matches((match,)), 1)
+        self.assertEqual(self.repository.list_unmatched_jobs(), ())
         self.assertEqual(
             self.repository.matched_job_ids((job.job_id, "unknown-job")),
             frozenset({job.job_id}),
@@ -114,6 +116,9 @@ class JobProspectRepositoryTests(unittest.TestCase):
                 source="sample",
                 url="https://example.com/jobs/1",
             )
+
+        with self.assertRaisesRegex(ValueError, "between 1 and 15"):
+            self.repository.list_unmatched_jobs(limit=16)
 
 
 if __name__ == "__main__":

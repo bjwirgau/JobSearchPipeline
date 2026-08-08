@@ -7,7 +7,7 @@ from utils.dates import to_utc_naive, utc_now
 from .connection import Database, MySQLCursor
 
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA_STATEMENTS = (
     """
@@ -35,6 +35,7 @@ SCHEMA_STATEMENTS = (
         salary VARCHAR(128) NOT NULL,
         source VARCHAR(64) NOT NULL,
         url VARCHAR(2048) NOT NULL,
+        job_data JSON NULL,
         created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
         updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
             ON UPDATE CURRENT_TIMESTAMP(6),
@@ -103,6 +104,8 @@ def initialize_schema(database: Database) -> None:
             _remove_legacy_tables(database, cursor)
         if current_version < 4:
             _add_job_prospect_timestamps(database, cursor)
+        if current_version < 7:
+            _add_job_prospect_payload(database, cursor)
         cursor.execute(
             """
             INSERT IGNORE INTO schema_migrations(version, applied_at)
@@ -164,3 +167,21 @@ def _add_job_prospect_timestamps(
         )
     if additions:
         cursor.execute("ALTER TABLE job_prospects " + ", ".join(additions))
+
+
+def _add_job_prospect_payload(
+    database: Database,
+    cursor: MySQLCursor,
+) -> None:
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME AS app_column_name
+        FROM information_schema.columns
+        WHERE table_schema = %s
+          AND table_name = 'job_prospects'
+          AND column_name = 'job_data'
+        """,
+        (database.config.database,),
+    )
+    if not cursor.fetchone():
+        cursor.execute("ALTER TABLE job_prospects ADD COLUMN job_data JSON NULL")

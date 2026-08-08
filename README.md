@@ -69,7 +69,7 @@ Phase 2 does not extract a PDF automatically. Review and correct the structured 
 
 ## Phase 3: Job Search Agent
 
-The search agent discovers jobs by criteria rather than iterating over a list of target companies. It builds one query per role and location, requests enabled discovery providers concurrently, normalizes their results into `JobPosting`, enforces hard filters, deduplicates across providers, stores job prospects in MySQL, and hands them to parsing and matching.
+The search agent discovers jobs by criteria rather than iterating over a list of target companies. It builds one query per role and location, requests enabled discovery providers concurrently, normalizes their results into `JobPosting`, enforces hard filters, deduplicates across providers, parses them, and stores job prospects in MySQL. LLM matching runs independently against the stored queue.
 
 Search criteria include:
 
@@ -99,8 +99,9 @@ LinkedIn login or manage browser sessions.
 Normalized jobs consistently include source identity, title, company, URL, location, description, detected skills, employment type, salary range, currency, remote status, and posting date. Missing source fields remain `None` or empty rather than being invented.
 
 MySQL stores the review-oriented projection in `job_prospects` with `job_id`,
-`match`, `title`, `company`, `location`, `salary`, `source`, `url`, `created_at`,
-and `updated_at` columns. The database assigns both UTC timestamps when a
+`match`, `title`, `company`, `location`, `salary`, `source`, `url`, `job_data`,
+`created_at`, and `updated_at` columns. `job_data` retains the complete
+normalized posting needed by the asynchronous matcher. The database assigns both UTC timestamps when a
 prospect is first stored, preserves `created_at`, and refreshes `updated_at`
 when the prospect or its match score changes. The match is nullable during
 search and updated to a score between `0` and `1` after the scoring stage.
@@ -118,8 +119,8 @@ prospects.
 
 ### LLM matching
 
-Each distinct normalized job is matched through the Gemini Developer API after
-parsing. The model receives job evidence plus the candidate's summary,
+The minute-based matching worker selects stored prospects whose match is null
+and sends them through the Gemini Developer API. The model receives job evidence plus the candidate's summary,
 preferences, and structured resume knowledge. The prompt deliberately omits the
 candidate's name, email address, resume path, and source job payload. Requests
 use schema-constrained JSON output, and the application validates every score
@@ -145,14 +146,14 @@ JOB_AGENT_MATCHING_PROMPT=prompts/score_match.txt
 `gemini-3.5-flash-lite` is the default because it is optimized for high-volume
 structured JSON and document extraction. The model remains configurable without
 a code change. One API request is made for every distinct job being scored, so
-result count and concurrency directly affect quota usage and latency. Matching
-defaults to one request at a time to avoid free-tier request bursts. Every
-workflow run is also hard-capped at 15 Gemini requests; the per-run setting can
-be lowered but values above 15 are rejected. Jobs beyond the cap remain stored
-without a match score and are eligible for a later `--unmatched-only` run. The
-search command stops before source requests when `GEMINI_API_KEY` is missing.
-Create a key in [Google AI Studio](https://aistudio.google.com/apikey), and see
-Google's [structured output documentation](https://ai.google.dev/gemini-api/docs/structured-output).
+result count directly affects quota usage and latency. Every matcher run is
+hard-capped at 15 Gemini requests, and request starts are spaced four seconds
+apart to enforce 15 RPM. The setting can be lowered but values above 15 are
+rejected. Jobs beyond the batch remain stored with a null match and are picked
+up by a later matcher run. Search does not require a Gemini key; only
+`--match-prospects` does. Create a key in
+[Google AI Studio](https://aistudio.google.com/apikey), and see Google's
+[structured output documentation](https://ai.google.dev/gemini-api/docs/structured-output).
 
 The unpaid Gemini API tier may use submitted content to improve Google products
 and may involve human review. Do not send sensitive or personally identifying
@@ -289,14 +290,12 @@ directory is ignored by Git. Cron uses the project's `.venv` Python executable
 and the application continues to load database and crawler settings from
 `.env`.
 
-### Scheduled Greenhouse prospect search
+### Scheduled Greenhouse prospect search and matching
 
 The prospect-search runner reads every Greenhouse board token currently stored
 in `company_prospects`, searches those boards using the candidate's configured
-titles and requirements, sends new matching jobs through LLM scoring, and
-persists them in `job_prospects`. Jobs that already have a stored match score
-are not sent to the LLM again; jobs left with a null score after a failed run are
-retried later.
+titles and requirements, and persists normalized postings in `job_prospects`.
+It does not make Gemini requests.
 
 The script prevents overlapping searches and appends output to
 `logs/greenhouse-prospect-search.log`. It defaults to 100 results per title
@@ -309,41 +308,56 @@ JOB_AGENT_GREENHOUSE_SEARCH_LIMIT=100
 
 This schedule runs once per hour at four minutes past the hour. Adjust the
 absolute project path when the deployment is not located at `/opt/job-agent`.
-Before enabling it, configure these values in the project's `.env`:
+The separate matcher runs every minute, claims up to 15 stored prospects with a
+null match, spaces Gemini requests four seconds apart, and writes successful
+scores back to the same rows:
+
+```cron
+JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN=15
+* * * * * /opt/job-agent/scripts/run_job_matcher.sh
+```
+
+Both runners use lock directories, so overlapping invocations exit without
+starting another search or matching batch. Before enabling them, configure
+these values in the project's `.env`:
 
 ```env
 JOB_AGENT_SEARCH_ENABLED=true
 GEMINI_API_KEY=your-api-key
 ```
 
-Install both project schedules for the current user from the project root. The
-installer is idempotent, replaces older entries for these two scripts, and
+Install all three project schedules (crawler, prospect search, and matcher) for
+the current user from the project root. The installer is idempotent, replaces
+older entries for these scripts, and
 preserves unrelated crontab entries:
 
 ```bash
 ./scripts/install_cron_jobs.sh
 ```
 
-Override either schedule only for the installer invocation when needed:
+Override schedules only for the installer invocation when needed:
 
 ```bash
 JOB_AGENT_PROSPECT_SEARCH_CRON_SCHEDULE='*/30 * * * *' \
+JOB_AGENT_MATCHER_CRON_SCHEDULE='* * * * *' \
   ./scripts/install_cron_jobs.sh
 ```
 
-Alternatively, edit the schedule directly with `crontab -e`. Verify both jobs
+Alternatively, edit the schedule directly with `crontab -e`. Verify the jobs
 with:
 
 ```bash
 crontab -l
-pgrep -af 'run_greenhouse_(crawler|prospect_search)'
+pgrep -af 'run_greenhouse_(crawler|prospect_search)|run_job_matcher'
 tail -f /opt/job-agent/logs/greenhouse-prospect-search.log
+tail -f /opt/job-agent/logs/job-matcher.log
 ```
 
 Run the scheduled behavior manually without waiting for cron:
 
 ```bash
 ./scripts/run_greenhouse_prospect_search.sh
+./scripts/run_job_matcher.sh
 ```
 
 The equivalent application command is:
@@ -351,14 +365,14 @@ The equivalent application command is:
 ```bash
 python3 app.py --search \
   --source greenhouse \
-  --unmatched-only \
   --limit 100
+
+python3 app.py --match-prospects --match-limit 15
 ```
 
-The first run can create many LLM requests. Lower
-`JOB_AGENT_GREENHOUSE_SEARCH_LIMIT` initially if API cost or rate limits are a
-concern. A normal search without `--unmatched-only` deliberately re-scores
-existing jobs after resume or prompt changes.
+Each successful search refreshes stored posting data without erasing an
+existing score. The matcher only selects prospects with a null match; failed
+jobs remain null and are retried by a later minute-based run.
 
 `JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT` is the maximum number of URL-index
 records inspected per supported Greenhouse hostname. `--crawl-limit` caps the
@@ -535,7 +549,7 @@ When remote-only search is active, profile and CLI locations (and their radius) 
 
 Discovery source names are `adzuna`, `remotive`, `usajobs`, and `linkedin`. Supplemental names are `greenhouse`, `lever`, `workday`, and `career_page`. Omitting `--source` searches every enabled source.
 
-Results are normalized, filtered, deduplicated, scored, printed to the terminal, and stored in the configured MySQL `job_prospects` table. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one source is configured.
+Search results are normalized, filtered, deduplicated, printed to the terminal, and stored in the configured MySQL `job_prospects` table. Matching is performed separately with `python3 app.py --match-prospects --match-limit 15`. If the application reports that no source supports the search, confirm that the search flag is enabled and at least one source is configured.
 
 Live search is disabled by default:
 

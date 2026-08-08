@@ -98,6 +98,7 @@ class FakeMySQLCursor:
                         "salary",
                         "source",
                         "url",
+                        "job_data",
                         "created_at",
                         "updated_at",
                     }
@@ -120,11 +121,14 @@ class FakeMySQLCursor:
             ]
             return
         if statement.startswith("select column_name as app_column_name"):
+            requested_columns = {"created_at", "updated_at"}
+            if "column_name = 'job_data'" in statement:
+                requested_columns = {"job_data"}
             self._rows = [
                 {"app_column_name": column_name}
                 for column_name in sorted(
                     self._connection.job_prospect_columns
-                    & {"created_at", "updated_at"}
+                    & requested_columns
                 )
             ]
             return
@@ -138,6 +142,10 @@ class FakeMySQLCursor:
                     self._connection.job_prospect_columns.add(column_name)
                     for row in self._connection.tables["job_prospects"].values():
                         row[column_name] = now
+            if "add column job_data" in statement:
+                self._connection.job_prospect_columns.add("job_data")
+                for row in self._connection.tables["job_prospects"].values():
+                    row["job_data"] = None
             return
         if statement.startswith("drop table if exists"):
             table_name = statement.rsplit(" ", 1)[-1]
@@ -171,6 +179,7 @@ class FakeMySQLCursor:
                 salary,
                 source,
                 url,
+                job_data,
             ) = values
             existing = self._connection.tables["job_prospects"].get(job_id)
             now = to_utc_naive(utc_now())
@@ -187,6 +196,11 @@ class FakeMySQLCursor:
                 "salary": salary,
                 "source": source,
                 "url": url,
+                "job_data": (
+                    job_data
+                    if job_data is not None
+                    else existing.get("job_data") if existing else None
+                ),
                 "created_at": existing["created_at"] if existing else now,
                 "updated_at": now,
             }
@@ -240,6 +254,18 @@ class FakeMySQLCursor:
                 row["match"] = match
                 row["updated_at"] = to_utc_naive(utc_now())
                 self.rowcount = 1
+            return
+        if statement.startswith("select job_data") and "from job_prospects" in statement:
+            limit = int(values[0])
+            rows = sorted(
+                (
+                    row
+                    for row in self._connection.tables["job_prospects"].values()
+                    if row["match"] is None and row.get("job_data") is not None
+                ),
+                key=lambda row: (row["created_at"], row["job_id"]),
+            )[:limit]
+            self._rows = [{"job_data": row["job_data"]} for row in rows]
             return
         if statement.startswith("select job_id") and "from job_prospects" in statement:
             if "where job_id" in statement:

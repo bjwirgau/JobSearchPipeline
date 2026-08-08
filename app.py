@@ -15,7 +15,6 @@ from typing import Sequence
 from agents import (
     CompanyCrawlerDisabledError,
     GreenhouseCompanyCrawler,
-    InvalidMatchResponseError,
     MatchingAgent,
     ParserAgent,
     SearchAgent,
@@ -45,7 +44,6 @@ from services import (
     GreenhouseCdxDiscovery,
     GreenhousePublicBoardLookup,
     LoggingNotificationService,
-    LLMResponseError,
     RequestsHttpClient,
     ResumeKnowledgeError,
     ResumeKnowledgeService,
@@ -55,7 +53,7 @@ from services import (
 from services.http_service import HttpRequestError
 from services.job_sources import GreenhouseBoard, LinkedInJobSource
 from utils.logging import configure_logging
-from workflows import JobSearchWorkflow
+from workflows import JobMatchingWorkflow, JobSearchWorkflow
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +67,7 @@ class JobAgentContainer:
     resume_knowledge: ResumeKnowledgeRepository
     resume_knowledge_service: ResumeKnowledgeService
     job_search_workflow: JobSearchWorkflow
+    job_matching_workflow: JobMatchingWorkflow
 
 
 def build_container(settings: Settings | None = None) -> JobAgentContainer:
@@ -166,9 +165,13 @@ def build_container(settings: Settings | None = None) -> JobAgentContainer:
         job_search_workflow=JobSearchWorkflow(
             search_agent=search_agent,
             parser_agent=parser_agent,
+        ),
+        job_matching_workflow=JobMatchingWorkflow(
+            repository=job_prospects,
+            parser_agent=parser_agent,
             matching_agent=matching_agent,
             notifications=notifications,
-            max_llm_requests_per_run=settings.matching_max_requests_per_run,
+            max_requests_per_run=settings.matching_max_requests_per_run,
         ),
     )
 
@@ -180,6 +183,17 @@ def _arguments(
 ) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Review-first job search pipeline")
     parser.add_argument("--search", action="store_true", help="run configured job sources")
+    parser.add_argument(
+        "--match-prospects",
+        action="store_true",
+        help="score stored job prospects that do not have a match",
+    )
+    parser.add_argument(
+        "--match-limit",
+        type=int,
+        default=settings.matching_max_requests_per_run if settings else 15,
+        help="maximum unmatched prospects to score, up to 15",
+    )
     parser.add_argument(
         "--crawl-greenhouse-companies",
         action="store_true",
@@ -237,18 +251,23 @@ def _arguments(
         help="oldest accepted posting in days",
     )
     parser.add_argument("--limit", type=int, default=25, help="results per source query")
-    parser.add_argument(
-        "--unmatched-only",
-        action="store_true",
-        help="score only jobs that do not already have a stored match",
-    )
     arguments = parser.parse_args(argv)
-    if arguments.crawl_greenhouse_companies and arguments.search:
-        parser.error("--crawl-greenhouse-companies cannot be combined with --search")
+    selected_commands = sum(
+        (
+            arguments.search,
+            arguments.match_prospects,
+            arguments.crawl_greenhouse_companies,
+        )
+    )
+    if selected_commands > 1:
+        parser.error(
+            "--search, --match-prospects, and --crawl-greenhouse-companies "
+            "cannot be combined"
+        )
+    if not 1 <= arguments.match_limit <= 15:
+        parser.error("--match-limit must be between 1 and 15")
     if arguments.dry_run and not arguments.search:
         parser.error("--dry-run requires --search")
-    if arguments.unmatched_only and not arguments.search:
-        parser.error("--unmatched-only requires --search")
     unsupported_dry_run_sources = tuple(
         source
         for source in arguments.source
@@ -313,6 +332,31 @@ def _format_job_grid(
             job.url,
         )
         for index, (job, match) in enumerate(ranked, 1)
+    ]
+    return _format_grid(columns, rows)
+
+
+def _format_search_job_grid(jobs: Sequence[JobPosting]) -> str:
+    columns = (
+        ("#", 3),
+        ("Title", 28),
+        ("Company", 22),
+        ("Location", 22),
+        ("Salary", 22),
+        ("Source", 12),
+        ("URL", 44),
+    )
+    rows = [
+        (
+            str(index),
+            job.title,
+            job.company,
+            job.location or "Not provided",
+            _format_salary(job),
+            job.source,
+            job.url,
+        )
+        for index, job in enumerate(jobs, 1)
     ]
     return _format_grid(columns, rows)
 
@@ -433,11 +477,6 @@ async def _run_search(
     container: JobAgentContainer,
     arguments: argparse.Namespace,
 ) -> int:
-    if not container.settings.gemini_api_key:
-        logging.getLogger(__name__).error(
-            "Job matching requires GEMINI_API_KEY to be configured"
-        )
-        return 1
     candidate = _load_candidate(container.settings.candidate_profile_path)
     knowledge = container.resume_knowledge_service.load()
     criteria = _search_criteria(arguments, candidate, knowledge)
@@ -447,27 +486,13 @@ async def _run_search(
     )
     selected_sources = container.job_search_workflow.selected_source_names(criteria)
     print(_format_searched_sources(selected_sources), flush=True)
-    try:
-        result = await container.job_search_workflow.run(
-            candidate,
-            criteria,
-            knowledge,
-            score_existing=not arguments.unmatched_only,
-        )
-    except (InvalidMatchResponseError, LLMResponseError) as error:
-        logging.getLogger(__name__).error("Job matching failed: %s", error)
-        return 1
-    ranked = sorted(
-        zip(result.jobs, result.matches),
-        key=lambda item: item[1].score,
-        reverse=True,
-    )
+    result = await container.job_search_workflow.run(criteria)
     print(
         f"Found {result.search.fetched_count} jobs; "
         f"stored {result.search.stored_count}; "
         f"{len(result.search.failures)} source requests failed."
     )
-    print(_format_job_grid(ranked))
+    print(_format_search_job_grid(result.jobs))
     for failure in result.search.failures:
         logging.getLogger(__name__).warning(
             "source=%s query=%s error=%s: %s",
@@ -476,7 +501,45 @@ async def _run_search(
             failure.error_type,
             failure.message,
         )
-    return 0 if ranked or not result.search.failures else 1
+    return 0 if result.jobs or not result.search.failures else 1
+
+
+async def _run_prospect_matching(
+    container: JobAgentContainer,
+    *,
+    limit: int,
+) -> int:
+    if not container.settings.gemini_api_key:
+        logging.getLogger(__name__).error(
+            "Job matching requires GEMINI_API_KEY to be configured"
+        )
+        return 1
+    candidate = _load_candidate(container.settings.candidate_profile_path)
+    knowledge = container.resume_knowledge_service.load()
+    result = await container.job_matching_workflow.run(
+        candidate,
+        knowledge,
+        limit=limit,
+    )
+    ranked = sorted(
+        zip(result.jobs, result.matches),
+        key=lambda item: item[1].score,
+        reverse=True,
+    )
+    print(
+        f"Matched {len(result.matches)} stored prospects; "
+        f"{len(result.failures)} failed."
+    )
+    print(_format_job_grid(ranked))
+    for failure in result.failures:
+        logging.getLogger(__name__).warning(
+            "job_id=%s title=%s error=%s: %s",
+            failure.job.job_id,
+            failure.job.title,
+            failure.error_type,
+            failure.message,
+        )
+    return 0 if result.matches or not result.failures else 1
 
 
 async def _run_company_crawl(
@@ -534,6 +597,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             _run_company_crawl(
                 container,
                 limit=arguments.crawl_limit,
+            )
+        )
+    if arguments.match_prospects:
+        return asyncio.run(
+            _run_prospect_matching(
+                container,
+                limit=arguments.match_limit,
             )
         )
     if arguments.search:

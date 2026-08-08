@@ -163,6 +163,9 @@ class SearchAgent:
     def store_matches(self, matches: Sequence[MatchResult]) -> int:
         return self._repository.update_matches(matches)
 
+    def store_jobs(self, jobs: Sequence[JobPosting]) -> int:
+        return self._repository.save_jobs(jobs)
+
     def unmatched_jobs(
         self,
         jobs: Sequence[JobPosting],

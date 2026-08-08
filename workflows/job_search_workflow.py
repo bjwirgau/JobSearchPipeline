@@ -1,26 +1,18 @@
-"""Search → Normalize → Parse → Score → Review orchestration."""
+"""Search → Normalize → Parse → Store orchestration."""
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 
-from agents import MatchingAgent, ParserAgent, SearchAgent
+from agents import ParserAgent, SearchAgent
 from models import (
-    CandidateProfile,
     JobPosting,
-    MatchResult,
-    ResumeKnowledgeBase,
     SearchCriteria,
     SearchRunResult,
     WorkflowRun,
     WorkflowStage,
     WorkflowStatus,
 )
-from services import NotificationService
-
-
-GEMINI_MAX_REQUESTS_PER_RUN = 15
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +20,6 @@ class JobSearchWorkflowResult:
     run: WorkflowRun
     search: SearchRunResult
     jobs: tuple[JobPosting, ...]
-    matches: tuple[MatchResult, ...]
 
 
 class JobSearchWorkflow:
@@ -37,21 +28,9 @@ class JobSearchWorkflow:
         *,
         search_agent: SearchAgent,
         parser_agent: ParserAgent,
-        matching_agent: MatchingAgent,
-        notifications: NotificationService,
-        review_threshold: float = 0.7,
-        max_llm_requests_per_run: int = GEMINI_MAX_REQUESTS_PER_RUN,
     ) -> None:
-        if not 0 <= review_threshold <= 1:
-            raise ValueError("review_threshold must be between 0 and 1")
-        if not 1 <= max_llm_requests_per_run <= GEMINI_MAX_REQUESTS_PER_RUN:
-            raise ValueError("max_llm_requests_per_run must be between 1 and 15")
         self._search = search_agent
         self._parser = parser_agent
-        self._matching = matching_agent
-        self._notifications = notifications
-        self._review_threshold = review_threshold
-        self._max_llm_requests_per_run = max_llm_requests_per_run
 
     def selected_source_names(
         self,
@@ -61,11 +40,7 @@ class JobSearchWorkflow:
 
     async def run(
         self,
-        candidate: CandidateProfile,
         criteria: SearchCriteria,
-        resume_knowledge: ResumeKnowledgeBase | None = None,
-        *,
-        score_existing: bool = True,
     ) -> JobSearchWorkflowResult:
         run = WorkflowRun("job_search").record(
             WorkflowStage.SEARCH,
@@ -85,46 +60,11 @@ class JobSearchWorkflow:
         )
 
         parsed_jobs = tuple(self._parser.parse(job) for job in search_result.jobs)
+        self._search.store_jobs(parsed_jobs)
         run = run.record(
             WorkflowStage.PARSE,
             WorkflowStatus.COMPLETED,
             f"Parsed {len(parsed_jobs)} jobs",
+            workflow_status=WorkflowStatus.COMPLETED,
         )
-        pending_jobs = (
-            parsed_jobs
-            if score_existing
-            else self._search.unmatched_jobs(parsed_jobs)
-        )
-        jobs_to_score = pending_jobs[: self._max_llm_requests_per_run]
-        deferred_count = len(pending_jobs) - len(jobs_to_score)
-        matches = tuple(
-            await asyncio.gather(
-                *(
-                    self._matching.score(candidate, job, resume_knowledge)
-                    for job in jobs_to_score
-                )
-            )
-        )
-        self._search.store_matches(matches)
-        run = run.record(
-            WorkflowStage.SCORE,
-            WorkflowStatus.COMPLETED,
-            (
-                f"Scored {len(matches)} jobs; deferred {deferred_count} to a later run"
-                if deferred_count
-                else f"Scored {len(matches)} jobs"
-            ),
-        )
-        review_count = sum(match.score >= self._review_threshold for match in matches)
-        await self._notifications.notify(
-            "job_review_required",
-            f"{review_count} jobs meet the review threshold",
-            metadata={"run_id": run.run_id},
-        )
-        run = run.record(
-            WorkflowStage.REVIEW,
-            WorkflowStatus.REVIEW_REQUIRED,
-            f"{review_count} matches await human review",
-            workflow_status=WorkflowStatus.REVIEW_REQUIRED,
-        )
-        return JobSearchWorkflowResult(run, search_result, jobs_to_score, matches)
+        return JobSearchWorkflowResult(run, search_result, parsed_jobs)

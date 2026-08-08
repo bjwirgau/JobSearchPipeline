@@ -18,7 +18,7 @@ from models import CandidateProfile, JobPosting, JobProspect, SearchCriteria
 from repositories import JobProspectRepository
 from services import InMemoryJobSource, LoggingNotificationService
 from tests.mysql_fakes import FakeMySQLServer
-from workflows import JobSearchWorkflow
+from workflows import JobMatchingWorkflow, JobSearchWorkflow
 
 
 MATCH_PROMPT = "{candidate_profile}\n{resume_knowledge}\n{job_posting}"
@@ -99,7 +99,7 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(stored.created_at)
         self.assertIsNotNone(stored.updated_at)
 
-    async def test_workflow_persists_match_score_on_the_job_prospect(self) -> None:
+    async def test_search_stores_jobs_for_the_separate_matching_workflow(self) -> None:
         job = JobPosting(
             source="fixture",
             external_id="matched-job",
@@ -115,8 +115,12 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
             enabled=True,
         )
         llm = StaticMatchLLM()
-        workflow = JobSearchWorkflow(
+        search_workflow = JobSearchWorkflow(
             search_agent=search_agent,
+            parser_agent=ParserAgent(),
+        )
+        matching_workflow = JobMatchingWorkflow(
+            repository=self.repository,
             parser_agent=ParserAgent(),
             matching_agent=MatchingAgent(
                 llm=llm,
@@ -137,18 +141,21 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
             job_titles=("Data Engineer",),
             locations=("Denver, CO",),
         )
-        result = await workflow.run(candidate, criteria)
+        search_result = await search_workflow.run(criteria)
 
         prospect = self.repository.get(job.job_id)
         self.assertIsNotNone(prospect)
-        self.assertAlmostEqual(prospect.match, result.matches[0].score)
+        self.assertIsNone(prospect.match)
+        self.assertEqual(search_result.jobs, (job,))
+        self.assertEqual(len(llm.prompts), 0)
+
+        match_result = await matching_workflow.run(candidate)
+
+        prospect = self.repository.get(job.job_id)
+        self.assertAlmostEqual(prospect.match, match_result.matches[0].score)
         self.assertEqual(len(llm.prompts), 1)
 
-        repeated = await workflow.run(
-            candidate,
-            criteria,
-            score_existing=False,
-        )
+        repeated = await matching_workflow.run(candidate)
 
         self.assertEqual(repeated.jobs, ())
         self.assertEqual(repeated.matches, ())
@@ -173,8 +180,12 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
             enabled=True,
         )
         llm = StaticMatchLLM()
-        workflow = JobSearchWorkflow(
+        search_workflow = JobSearchWorkflow(
             search_agent=search_agent,
+            parser_agent=ParserAgent(),
+        )
+        matching_workflow = JobMatchingWorkflow(
+            repository=self.repository,
             parser_agent=ParserAgent(),
             matching_agent=MatchingAgent(
                 llm=llm,
@@ -190,11 +201,12 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
             desired_titles=("Data Engineer",),
         )
 
-        result = await workflow.run(
-            candidate,
+        search_result = await search_workflow.run(
             SearchCriteria(job_titles=("Data Engineer",), results_per_query=20),
         )
+        result = await matching_workflow.run(candidate)
 
+        self.assertEqual(len(search_result.jobs), 20)
         self.assertEqual(len(result.jobs), 15)
         self.assertEqual(len(result.matches), 15)
         self.assertEqual(len(llm.prompts), 15)

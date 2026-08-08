@@ -77,6 +77,28 @@ class GeminiLLMServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("RuntimeError", str(raised.exception))
         self.assertNotIn("secret-key", str(raised.exception))
 
+    async def test_spaces_requests_to_respect_fifteen_per_minute(self) -> None:
+        models = FakeModels(SimpleNamespace(text="ok"))
+        now = [100.0]
+        delays: list[float] = []
+
+        async def advance_clock(delay: float) -> None:
+            delays.append(delay)
+            now[0] += delay
+
+        service = GeminiLLMService(
+            GeminiConfig(api_key="secret-key"),
+            client=SimpleNamespace(models=models),
+            clock=lambda: now[0],
+            sleep=advance_clock,
+        )
+
+        await service.generate_text("First")
+        await service.generate_text("Second")
+
+        self.assertEqual(len(models.calls), 2)
+        self.assertEqual(delays, [4.0])
+
     async def test_disabled_service_explains_required_configuration(self) -> None:
         with self.assertRaisesRegex(LLMNotConfiguredError, "GEMINI_API_KEY"):
             await DisabledLLMService().generate_structured(
