@@ -5,7 +5,7 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_root=$(dirname -- "$script_dir")
 crawler_schedule="${JOB_AGENT_CRAWLER_CRON_SCHEDULE:-*/5 * * * *}"
-prospect_schedule="${JOB_AGENT_PROSPECT_SEARCH_CRON_SCHEDULE:-4 * * * *}"
+prospect_schedule="${JOB_AGENT_PROSPECT_SEARCH_CRON_SCHEDULE:-* * * * *}"
 matcher_schedule="${JOB_AGENT_MATCHER_CRON_SCHEDULE:-* * * * *}"
 search_limit="${JOB_AGENT_GREENHOUSE_SEARCH_LIMIT:-100}"
 board_limit="${JOB_AGENT_GREENHOUSE_BOARD_LIMIT:-25}"
