@@ -263,7 +263,7 @@ Run one crawl with:
 python3 app.py --crawl-greenhouse-companies --crawl-limit 100
 ```
 
-### Scheduled crawler
+### Scheduled company crawler
 
 The crawler can run every five minutes through the current user's crontab. The
 installed schedule uses the project runner, which prevents overlapping crawls,
@@ -278,6 +278,77 @@ Inspect or remove the schedule with `crontab -l` or `crontab -e`. The `logs/`
 directory is ignored by Git. Cron uses the project's `.venv` Python executable
 and the application continues to load database and crawler settings from
 `.env`.
+
+### Scheduled Greenhouse prospect search
+
+The prospect-search runner reads every Greenhouse board token currently stored
+in `company_prospects`, searches those boards using the candidate's configured
+titles and requirements, sends new matching jobs through LLM scoring, and
+persists them in `job_prospects`. Jobs that already have a stored match score
+are not sent to the LLM again; jobs left with a null score after a failed run are
+retried later.
+
+The script prevents overlapping searches and appends output to
+`logs/greenhouse-prospect-search.log`. It defaults to 100 results per title
+query. Override that limit through the cron environment if needed:
+
+```cron
+JOB_AGENT_GREENHOUSE_SEARCH_LIMIT=100
+4 * * * * /opt/job-agent/scripts/run_greenhouse_prospect_search.sh
+```
+
+This schedule runs once per hour at four minutes past the hour. Adjust the
+absolute project path when the deployment is not located at `/opt/job-agent`.
+Before enabling it, configure these values in the project's `.env`:
+
+```env
+JOB_AGENT_SEARCH_ENABLED=true
+OPENAI_API_KEY=your-api-key
+```
+
+Install both project schedules for the current user from the project root. The
+installer is idempotent, replaces older entries for these two scripts, and
+preserves unrelated crontab entries:
+
+```bash
+./scripts/install_cron_jobs.sh
+```
+
+Override either schedule only for the installer invocation when needed:
+
+```bash
+JOB_AGENT_PROSPECT_SEARCH_CRON_SCHEDULE='*/30 * * * *' \
+  ./scripts/install_cron_jobs.sh
+```
+
+Alternatively, edit the schedule directly with `crontab -e`. Verify both jobs
+with:
+
+```bash
+crontab -l
+pgrep -af 'run_greenhouse_(crawler|prospect_search)'
+tail -f /opt/job-agent/logs/greenhouse-prospect-search.log
+```
+
+Run the scheduled behavior manually without waiting for cron:
+
+```bash
+./scripts/run_greenhouse_prospect_search.sh
+```
+
+The equivalent application command is:
+
+```bash
+python3 app.py --search \
+  --source greenhouse \
+  --unmatched-only \
+  --limit 100
+```
+
+The first run can create many LLM requests. Lower
+`JOB_AGENT_GREENHOUSE_SEARCH_LIMIT` initially if API cost or rate limits are a
+concern. A normal search without `--unmatched-only` deliberately re-scores
+existing jobs after resume or prompt changes.
 
 `JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT` is the maximum number of URL-index
 records inspected per supported Greenhouse hostname. `--crawl-limit` caps the

@@ -237,11 +237,18 @@ def _arguments(
         help="oldest accepted posting in days",
     )
     parser.add_argument("--limit", type=int, default=25, help="results per source query")
+    parser.add_argument(
+        "--unmatched-only",
+        action="store_true",
+        help="score only jobs that do not already have a stored match",
+    )
     arguments = parser.parse_args(argv)
     if arguments.crawl_greenhouse_companies and arguments.search:
         parser.error("--crawl-greenhouse-companies cannot be combined with --search")
     if arguments.dry_run and not arguments.search:
         parser.error("--dry-run requires --search")
+    if arguments.unmatched_only and not arguments.search:
+        parser.error("--unmatched-only requires --search")
     unsupported_dry_run_sources = tuple(
         source
         for source in arguments.source
@@ -441,7 +448,12 @@ async def _run_search(
     selected_sources = container.job_search_workflow.selected_source_names(criteria)
     print(_format_searched_sources(selected_sources), flush=True)
     try:
-        result = await container.job_search_workflow.run(candidate, criteria, knowledge)
+        result = await container.job_search_workflow.run(
+            candidate,
+            criteria,
+            knowledge,
+            score_existing=not arguments.unmatched_only,
+        )
     except (InvalidMatchResponseError, LLMResponseError) as error:
         logging.getLogger(__name__).error("Job matching failed: %s", error)
         return 1

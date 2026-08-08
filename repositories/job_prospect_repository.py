@@ -67,6 +67,24 @@ class JobProspectRepository:
                 )
         return len(matches)
 
+    def matched_job_ids(self, job_ids: Sequence[str]) -> frozenset[str]:
+        unique_ids = tuple(dict.fromkeys(job_id for job_id in job_ids if job_id))
+        if not unique_ids:
+            return frozenset()
+        placeholders = ", ".join("%s" for _ in unique_ids)
+        with self._database.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT job_id
+                FROM job_prospects
+                WHERE `match` IS NOT NULL
+                  AND job_id IN ({placeholders})
+                """,
+                unique_ids,
+            )
+            rows = cursor.fetchall()
+        return frozenset(str(row["job_id"]) for row in rows)
+
     def get(self, job_id: str) -> JobProspect | None:
         with self._database.cursor() as cursor:
             cursor.execute(

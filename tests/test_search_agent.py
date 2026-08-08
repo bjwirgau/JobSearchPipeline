@@ -25,6 +25,9 @@ MATCH_PROMPT = "{candidate_profile}\n{resume_knowledge}\n{job_posting}"
 
 
 class StaticMatchLLM:
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
     async def generate_text(self, prompt: str) -> str:
         raise AssertionError("matching must use structured output")
 
@@ -34,6 +37,7 @@ class StaticMatchLLM:
         *,
         schema: Mapping[str, Any],
     ) -> Mapping[str, Any]:
+        self.prompts.append(prompt)
         return {
             "score": 0.88,
             "breakdown": {
@@ -110,34 +114,45 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
             repository=self.repository,
             enabled=True,
         )
+        llm = StaticMatchLLM()
         workflow = JobSearchWorkflow(
             search_agent=search_agent,
             parser_agent=ParserAgent(),
             matching_agent=MatchingAgent(
-                llm=StaticMatchLLM(),
+                llm=llm,
                 prompt_template=MATCH_PROMPT,
             ),
             notifications=LoggingNotificationService(),
         )
 
-        result = await workflow.run(
-            CandidateProfile(
-                candidate_id="candidate-1",
-                full_name="Example Candidate",
-                email="candidate@example.com",
-                skills=("Python",),
-                desired_titles=("Data Engineer",),
-                desired_locations=("Denver, CO",),
-            ),
-            SearchCriteria(
-                job_titles=("Data Engineer",),
-                locations=("Denver, CO",),
-            ),
+        candidate = CandidateProfile(
+            candidate_id="candidate-1",
+            full_name="Example Candidate",
+            email="candidate@example.com",
+            skills=("Python",),
+            desired_titles=("Data Engineer",),
+            desired_locations=("Denver, CO",),
         )
+        criteria = SearchCriteria(
+            job_titles=("Data Engineer",),
+            locations=("Denver, CO",),
+        )
+        result = await workflow.run(candidate, criteria)
 
         prospect = self.repository.get(job.job_id)
         self.assertIsNotNone(prospect)
         self.assertAlmostEqual(prospect.match, result.matches[0].score)
+        self.assertEqual(len(llm.prompts), 1)
+
+        repeated = await workflow.run(
+            candidate,
+            criteria,
+            score_existing=False,
+        )
+
+        self.assertEqual(repeated.jobs, ())
+        self.assertEqual(repeated.matches, ())
+        self.assertEqual(len(llm.prompts), 1)
 
     async def test_query_builder_preserves_discovery_criteria(self) -> None:
         query = SearchQueryBuilder().build(

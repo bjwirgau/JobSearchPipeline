@@ -246,6 +246,14 @@ class FakeMySQLCursor:
                 row = self._connection.tables["job_prospects"].get(values[0])
                 self._rows = [dict(row)] if row else []
                 return
+            if "where `match` is not null" in statement:
+                selected_ids = set(values)
+                self._rows = [
+                    {"job_id": row["job_id"]}
+                    for row in self._connection.tables["job_prospects"].values()
+                    if row["job_id"] in selected_ids and row["match"] is not None
+                ]
+                return
             limit = int(values[0])
             rows = sorted(
                 self._connection.tables["job_prospects"].values(),

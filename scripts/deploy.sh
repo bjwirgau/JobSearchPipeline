@@ -6,7 +6,9 @@ commit_sha="${1:-}"
 project_root="/opt/job-agent"
 deploy_lock="/tmp/job-agent-deploy.lock"
 crawler_lock="/tmp/job-agent-greenhouse-crawler.lock"
+prospect_search_lock="/tmp/job-agent-greenhouse-prospect-search.lock"
 crawler_lock_acquired=0
+prospect_search_lock_acquired=0
 
 if [ "${#commit_sha}" -ne 40 ]; then
     echo "A 40-character Git commit SHA is required."
@@ -26,6 +28,10 @@ if ! mkdir "$deploy_lock" 2>/dev/null; then
 fi
 
 cleanup() {
+    if [ "$prospect_search_lock_acquired" -eq 1 ]; then
+        rm -f "$prospect_search_lock/pid"
+        rmdir "$prospect_search_lock" 2>/dev/null || true
+    fi
     if [ "$crawler_lock_acquired" -eq 1 ]; then
         rm -f "$crawler_lock/pid"
         rmdir "$crawler_lock" 2>/dev/null || true
@@ -47,6 +53,20 @@ done
 
 crawler_lock_acquired=1
 printf '%s\n' "$$" >"$crawler_lock/pid"
+
+# Also prevent a scheduled prospect search from using files during checkout.
+attempt=0
+while ! mkdir "$prospect_search_lock" 2>/dev/null; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 120 ]; then
+        echo "Timed out waiting for the Greenhouse prospect search."
+        exit 1
+    fi
+    sleep 5
+done
+
+prospect_search_lock_acquired=1
+printf '%s\n' "$$" >"$prospect_search_lock/pid"
 
 cd "$project_root"
 

@@ -165,6 +165,18 @@ class ApplicationCriteriaTests(unittest.TestCase):
             )
         self.assertIn("cannot be combined with --search", errors.getvalue())
 
+    def test_unmatched_only_is_limited_to_search(self) -> None:
+        arguments = _arguments(
+            ["--search", "--source", "greenhouse", "--unmatched-only"],
+            settings=self.settings,
+        )
+
+        self.assertTrue(arguments.unmatched_only)
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            _arguments(["--unmatched-only"], settings=self.settings)
+        self.assertIn("--unmatched-only requires --search", errors.getvalue())
+
     def test_company_crawler_results_render_as_a_named_grid(self) -> None:
         grid = _format_company_grid(
             (

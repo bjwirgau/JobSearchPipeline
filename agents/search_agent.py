@@ -163,6 +163,15 @@ class SearchAgent:
     def store_matches(self, matches: Sequence[MatchResult]) -> int:
         return self._repository.update_matches(matches)
 
+    def unmatched_jobs(
+        self,
+        jobs: Sequence[JobPosting],
+    ) -> tuple[JobPosting, ...]:
+        matched_ids = self._repository.matched_job_ids(
+            tuple(job.job_id for job in jobs)
+        )
+        return tuple(job for job in jobs if job.job_id not in matched_ids)
+
     def select_sources(self, criteria: SearchCriteria) -> tuple[JobSourceService, ...]:
         if criteria.source_names:
             requested = tuple(normalize_text(name) for name in criteria.source_names)

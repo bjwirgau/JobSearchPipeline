@@ -33,6 +33,7 @@ class JobProspectRepositoryTests(unittest.TestCase):
             salary_currency="USD",
         )
         self.assertEqual(self.repository.save_jobs((job,)), 1)
+        self.assertEqual(self.repository.matched_job_ids((job.job_id,)), frozenset())
         created = self.repository.get(job.job_id)
         self.assertIsNotNone(created)
         self.assertEqual(
@@ -56,6 +57,10 @@ class JobProspectRepositoryTests(unittest.TestCase):
             ),
         )
         self.assertEqual(self.repository.update_matches((match,)), 1)
+        self.assertEqual(
+            self.repository.matched_job_ids((job.job_id, "unknown-job")),
+            frozenset({job.job_id}),
+        )
 
         expected = JobProspect.from_job(updated_job, match=0.875)
         updated = self.repository.get(job.job_id)

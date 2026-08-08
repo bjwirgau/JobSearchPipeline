@@ -57,6 +57,8 @@ class JobSearchWorkflow:
         candidate: CandidateProfile,
         criteria: SearchCriteria,
         resume_knowledge: ResumeKnowledgeBase | None = None,
+        *,
+        score_existing: bool = True,
     ) -> JobSearchWorkflowResult:
         run = WorkflowRun("job_search").record(
             WorkflowStage.SEARCH,
@@ -81,11 +83,16 @@ class JobSearchWorkflow:
             WorkflowStatus.COMPLETED,
             f"Parsed {len(parsed_jobs)} jobs",
         )
+        jobs_to_score = (
+            parsed_jobs
+            if score_existing
+            else self._search.unmatched_jobs(parsed_jobs)
+        )
         matches = tuple(
             await asyncio.gather(
                 *(
                     self._matching.score(candidate, job, resume_knowledge)
-                    for job in parsed_jobs
+                    for job in jobs_to_score
                 )
             )
         )
@@ -107,4 +114,4 @@ class JobSearchWorkflow:
             f"{review_count} matches await human review",
             workflow_status=WorkflowStatus.REVIEW_REQUIRED,
         )
-        return JobSearchWorkflowResult(run, search_result, parsed_jobs, matches)
+        return JobSearchWorkflowResult(run, search_result, jobs_to_score, matches)
