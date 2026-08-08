@@ -414,7 +414,11 @@ listed board URLs.
 The crawler reads URL indexes only; it does not download archived page content.
 CDX requests are sequential and delayed because public indexes are rate-limited.
 Archive requests use the smallest CDX page size and retry once after an HTTP
-failure; failure on one hostname does not discard candidates from other hosts.
+failure. Common Crawl requests are attempted up to three times; failure on one
+hostname does not discard candidates from other hosts. If both public indexes
+are temporarily unavailable, the crawler logs a warning and revisits canonical
+US boards already stored in `company_prospects`. It still fails when there are
+no stored boards, because no safe discovery source is available in that case.
 Keep the delay enabled, avoid concurrent crawler runs, and use Common Crawl's
 bulk URL Index instead if this grows into a large-scale data collection
 workload. Archive indexes can be incomplete or stale, so every token is verified

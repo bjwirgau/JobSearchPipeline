@@ -12,6 +12,7 @@ from database import Database, MySQLConfig, initialize_schema
 from models import CompanyProspect
 from repositories import CompanyProspectRepository, CrawlPageRepository
 from services import (
+    CompanyDiscoveryError,
     GreenhouseBoardCandidate,
     GreenhouseCdxDiscovery,
     GreenhousePublicBoardLookup,
@@ -172,12 +173,36 @@ class FakeRetryArchiveHttpClient(FakeFallbackDiscoveryHttpClient):
         return await super().get(url, params=params, headers=headers)
 
 
+class FakeRetryCommonCrawlHttpClient(FakeCommonCrawlFallbackHttpClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.common_crawl_failed_once = False
+
+    async def get(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, object] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> HttpResponse:
+        if url.endswith("collinfo.json") and not self.common_crawl_failed_once:
+            self.common_crawl_failed_once = True
+            self.calls.append((url, params))
+            raise HttpRequestError("Common Crawl disconnected")
+        return await super().get(url, params=params, headers=headers)
+
+
 class StaticDiscovery:
     def __init__(self, candidates: tuple[GreenhouseBoardCandidate, ...]) -> None:
         self.candidates = candidates
 
     async def discover(self) -> tuple[GreenhouseBoardCandidate, ...]:
         return self.candidates
+
+
+class FailingDiscovery:
+    async def discover(self) -> tuple[GreenhouseBoardCandidate, ...]:
+        raise CompanyDiscoveryError("public indexes unavailable")
 
 
 class StaticBoardLookup:
@@ -320,6 +345,25 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
             3,
         )
 
+    async def test_common_crawl_request_retries_after_disconnect(self) -> None:
+        http = FakeRetryCommonCrawlHttpClient()
+        discovery = GreenhouseCdxDiscovery(
+            http=http,
+            scan_limit=100,
+            request_delay_seconds=0,
+        )
+
+        candidates = await discovery.discover()
+
+        self.assertEqual(
+            {candidate.board_token for candidate in candidates},
+            {"example"},
+        )
+        self.assertEqual(
+            sum(call[0].endswith("collinfo.json") for call in http.calls),
+            2,
+        )
+
     async def test_fallback_keeps_results_when_one_archive_host_fails(self) -> None:
         http = FakeFallbackDiscoveryHttpClient(
             failed_archive_hosts=("boards.greenhouse.io",)
@@ -424,6 +468,50 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(second.skipped_recent_count, 1)
         self.assertEqual(third.checked_count, 1)
         self.assertEqual(boards.calls, ["example", "example"])
+
+    async def test_crawler_uses_stored_us_boards_when_discovery_is_down(self) -> None:
+        existing = CompanyProspect.from_board(
+            company_name="Existing Company",
+            board_token="existing",
+            company_url="https://job-boards.greenhouse.io/existing",
+        )
+        self.repository.save(existing)
+        boards = StaticBoardLookup()
+        crawler = GreenhouseCompanyCrawler(
+            discovery=FailingDiscovery(),
+            boards=boards,
+            repository=self.repository,
+            crawl_pages=self.crawl_pages,
+            enabled=True,
+        )
+
+        with self.assertLogs("agents.company_crawler", level="WARNING"):
+            result = await crawler.crawl()
+
+        self.assertEqual(result.discovered_count, 1)
+        self.assertEqual(result.checked_count, 1)
+        self.assertEqual(result.updated_count, 1)
+        self.assertEqual(boards.calls, ["existing"])
+        self.assertIsNotNone(result.discovery_warning)
+        self.assertIn(
+            "using 1 stored US Greenhouse boards",
+            result.discovery_warning or "",
+        )
+
+    async def test_crawler_fails_when_discovery_and_inventory_are_empty(self) -> None:
+        crawler = GreenhouseCompanyCrawler(
+            discovery=FailingDiscovery(),
+            boards=StaticBoardLookup(),
+            repository=self.repository,
+            crawl_pages=self.crawl_pages,
+            enabled=True,
+        )
+
+        with self.assertRaisesRegex(
+            CompanyDiscoveryError,
+            "public indexes unavailable",
+        ):
+            await crawler.crawl()
 
     async def test_crawler_is_disabled_by_default(self) -> None:
         crawler = GreenhouseCompanyCrawler(

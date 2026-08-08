@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -15,11 +16,16 @@ from models import (
 )
 from repositories import CompanyProspectRepository, CrawlPageRepository
 from services.greenhouse_company_discovery import (
+    CompanyDiscoveryError,
     GreenhouseBoardCandidate,
     GreenhouseBoardLookup,
     GreenhouseCompanyDiscovery,
 )
+from services.http_service import HttpRequestError
 from utils.dates import utc_now
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class CompanyCrawlerDisabledError(RuntimeError):
@@ -41,6 +47,7 @@ class CompanyCrawlResult:
     updated_count: int
     companies: tuple[CompanyProspect, ...]
     failures: tuple[CompanyCrawlFailure, ...]
+    discovery_warning: str | None = None
 
 
 class GreenhouseCompanyCrawler:
@@ -78,7 +85,25 @@ class GreenhouseCompanyCrawler:
         if not 1 <= limit <= 1_000:
             raise ValueError("company crawl limit must be between 1 and 1000")
 
-        candidates = await self._discovery.discover()
+        discovery_warning: str | None = None
+        try:
+            candidates = await self._discovery.discover()
+        except (CompanyDiscoveryError, HttpRequestError) as error:
+            stored_companies = self._repository.list_all()
+            if not stored_companies:
+                raise
+            candidates = tuple(
+                GreenhouseBoardCandidate(
+                    board_token=company.board_token,
+                    company_url=company.company_url,
+                )
+                for company in stored_companies
+            )
+            discovery_warning = (
+                f"Live discovery unavailable ({error}); using "
+                f"{len(candidates)} stored US Greenhouse boards"
+            )
+            LOGGER.warning(discovery_warning)
         blocked_urls = self._crawl_pages.blocked_urls(
             source="greenhouse",
             page_type=CrawlPageType.COMPANY_BOARD,
@@ -145,6 +170,7 @@ class GreenhouseCompanyCrawler:
             updated_count=len(companies) - inserted_count,
             companies=tuple(companies),
             failures=tuple(failures),
+            discovery_warning=discovery_warning,
         )
 
     async def _retrieve_companies(

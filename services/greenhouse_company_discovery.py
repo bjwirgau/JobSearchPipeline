@@ -45,6 +45,7 @@ class GreenhouseCdxDiscovery:
     COLLECTIONS_URL = "https://index.commoncrawl.org/collinfo.json"
     INTERNET_ARCHIVE_INDEX_URL = "https://web.archive.org/cdx/search/cdx"
     ARCHIVE_REQUEST_ATTEMPTS = 2
+    COMMON_CRAWL_REQUEST_ATTEMPTS = 3
     BOARD_HOSTS = (
         "job-boards.greenhouse.io",
         "boards.greenhouse.io",
@@ -88,20 +89,41 @@ class GreenhouseCdxDiscovery:
     ) -> tuple[GreenhouseBoardCandidate, ...]:
         index_url = await self._latest_index_url()
         candidates: dict[str, GreenhouseBoardCandidate] = {}
+        failures: list[tuple[str, HttpRequestError]] = []
         for host in self.BOARD_HOSTS:
             await self._delay_request()
-            response = await self._http.get(
-                index_url,
-                params={
-                    "url": f"{host}/*",
-                    "output": "json",
-                    "fl": "url",
-                    "filter": "status:200",
-                    "collapse": "urlkey",
-                    "limit": self._scan_limit,
-                },
-            )
+            try:
+                response = await self._request_common_crawl(
+                    index_url,
+                    params={
+                        "url": f"{host}/*",
+                        "output": "json",
+                        "fl": "url",
+                        "filter": "status:200",
+                        "collapse": "urlkey",
+                        "limit": self._scan_limit,
+                    },
+                )
+            except HttpRequestError as error:
+                failures.append((host, error))
+                LOGGER.warning(
+                    "Common Crawl discovery failed for %s: %s",
+                    host,
+                    error,
+                )
+                continue
             _collect_candidates(candidates, _urls_from_cdx(response.text))
+        if not candidates:
+            failed_hosts = ", ".join(host for host, _ in failures)
+            failure_detail = (
+                f"; failed hosts: {failed_hosts}; last error: {failures[-1][1]}"
+                if failures
+                else ""
+            )
+            raise CompanyDiscoveryError(
+                "Common Crawl did not return Greenhouse candidates"
+                f"{failure_detail}"
+            ) from (failures[-1][1] if failures else None)
         return _sorted_candidates(candidates)
 
     async def _discover_from_internet_archive(
@@ -169,7 +191,7 @@ class GreenhouseCdxDiscovery:
             await asyncio.sleep(self._request_delay_seconds)
 
     async def _latest_index_url(self) -> str:
-        response = await self._http.get(self.COLLECTIONS_URL)
+        response = await self._request_common_crawl(self.COLLECTIONS_URL)
         payload = response.json()
         if not isinstance(payload, list) or not payload:
             raise CompanyDiscoveryError(
@@ -182,6 +204,30 @@ class GreenhouseCdxDiscovery:
         if not index_url.startswith("https://index.commoncrawl.org/"):
             raise CompanyDiscoveryError("Common Crawl index URL is invalid")
         return index_url
+
+    async def _request_common_crawl(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, object] | None = None,
+    ) -> HttpResponse:
+        last_error: HttpRequestError | None = None
+        for attempt in range(self.COMMON_CRAWL_REQUEST_ATTEMPTS):
+            if attempt and self._request_delay_seconds:
+                await asyncio.sleep(self._request_delay_seconds)
+            try:
+                return await self._http.get(
+                    url,
+                    params=params,
+                    headers={"Connection": "close"},
+                )
+            except HttpRequestError as error:
+                last_error = error
+        if last_error is None:
+            raise RuntimeError(
+                "Common Crawl request attempts must be greater than zero"
+            )
+        raise last_error
 
 
 class GreenhousePublicBoardLookup:
