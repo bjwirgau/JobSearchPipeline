@@ -23,6 +23,7 @@ class FakeMySQLServer:
             "workflow_runs": {},
         }
         self.job_prospect_columns: set[str] = set()
+        self.company_prospect_columns: set[str] = set()
         self.resume_candidate_foreign_key = True
         self.connect_calls: list[dict[str, object]] = []
         self.connections: list[FakeMySQLConnection] = []
@@ -39,6 +40,7 @@ class FakeMySQLConnection:
         self._server = server
         self.tables = deepcopy(server.tables)
         self.job_prospect_columns = set(server.job_prospect_columns)
+        self.company_prospect_columns = set(server.company_prospect_columns)
         self.resume_candidate_foreign_key = server.resume_candidate_foreign_key
         self.committed = False
         self.rolled_back = False
@@ -50,6 +52,7 @@ class FakeMySQLConnection:
     def commit(self) -> None:
         self._server.tables = deepcopy(self.tables)
         self._server.job_prospect_columns = set(self.job_prospect_columns)
+        self._server.company_prospect_columns = set(self.company_prospect_columns)
         self._server.resume_candidate_foreign_key = (
             self.resume_candidate_foreign_key
         )
@@ -104,6 +107,16 @@ class FakeMySQLCursor:
                     }
             if " company_prospects " in statement:
                 self._connection.tables.setdefault("company_prospects", {})
+                if not self._connection.company_prospect_columns:
+                    self._connection.company_prospect_columns = {
+                        "company_id",
+                        "company_name",
+                        "board_token",
+                        "company_url",
+                        "last_job_search_at",
+                        "created_at",
+                        "updated_at",
+                    }
             if " crawl_pages " in statement:
                 self._connection.tables.setdefault("crawl_pages", {})
             return
@@ -122,13 +135,16 @@ class FakeMySQLCursor:
             return
         if statement.startswith("select column_name as app_column_name"):
             requested_columns = {"created_at", "updated_at"}
+            available_columns = self._connection.job_prospect_columns
             if "column_name = 'job_data'" in statement:
                 requested_columns = {"job_data"}
+            elif "column_name = 'last_job_search_at'" in statement:
+                requested_columns = {"last_job_search_at"}
+                available_columns = self._connection.company_prospect_columns
             self._rows = [
                 {"app_column_name": column_name}
                 for column_name in sorted(
-                    self._connection.job_prospect_columns
-                    & requested_columns
+                    available_columns & requested_columns
                 )
             ]
             return
@@ -146,6 +162,14 @@ class FakeMySQLCursor:
                 self._connection.job_prospect_columns.add("job_data")
                 for row in self._connection.tables["job_prospects"].values():
                     row["job_data"] = None
+            return
+        if statement.startswith("alter table company_prospects"):
+            if "add column last_job_search_at" in statement:
+                self._connection.company_prospect_columns.add(
+                    "last_job_search_at"
+                )
+                for row in self._connection.tables["company_prospects"].values():
+                    row["last_job_search_at"] = None
             return
         if statement.startswith("drop table if exists"):
             table_name = statement.rsplit(" ", 1)[-1]
@@ -217,6 +241,9 @@ class FakeMySQLCursor:
                 "company_name": company_name,
                 "board_token": board_token,
                 "company_url": company_url,
+                "last_job_search_at": (
+                    existing.get("last_job_search_at") if existing else None
+                ),
                 "created_at": existing["created_at"] if existing else now,
                 "updated_at": now,
             }
@@ -254,6 +281,15 @@ class FakeMySQLCursor:
                 row["match"] = match
                 row["updated_at"] = to_utc_naive(utc_now())
                 self.rowcount = 1
+            return
+        if statement.startswith("update company_prospects"):
+            selected_at, *company_ids = values
+            for company_id in company_ids:
+                row = self._connection.tables["company_prospects"].get(company_id)
+                if row:
+                    row["last_job_search_at"] = selected_at
+                    row["updated_at"] = to_utc_naive(utc_now())
+                    self.rowcount += 1
             return
         if statement.startswith("select job_data") and "from job_prospects" in statement:
             limit = int(values[0])
@@ -303,10 +339,21 @@ class FakeMySQLCursor:
                 row = self._connection.tables["company_prospects"].get(values[0])
                 self._rows = [dict(row)] if row else []
                 return
-            rows = sorted(
-                self._connection.tables["company_prospects"].values(),
-                key=lambda row: (row["company_name"], row["board_token"]),
-            )
+            if "order by (last_job_search_at is not null)" in statement:
+                rows = sorted(
+                    self._connection.tables["company_prospects"].values(),
+                    key=lambda row: (
+                        row.get("last_job_search_at") is not None,
+                        row.get("last_job_search_at"),
+                        row["company_name"],
+                        row["board_token"],
+                    ),
+                )
+            else:
+                rows = sorted(
+                    self._connection.tables["company_prospects"].values(),
+                    key=lambda row: (row["company_name"], row["board_token"]),
+                )
             if values:
                 rows = rows[: int(values[0])]
             self._rows = [dict(row) for row in rows]

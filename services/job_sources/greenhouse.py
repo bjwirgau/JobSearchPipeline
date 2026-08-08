@@ -43,10 +43,14 @@ class GreenhouseJobSource:
         http: HttpClient,
         normalizer: JobNormalizer,
         concurrency: int = 10,
+        board_limit: int = 25,
     ) -> None:
         if concurrency <= 0:
             raise ValueError("Greenhouse concurrency must be greater than zero")
-        self._boards = tuple({board.token: board for board in boards}.values())
+        if not 1 <= board_limit <= 1_000:
+            raise ValueError("Greenhouse board limit must be between 1 and 1000")
+        unique_boards = tuple({board.token: board for board in boards}.values())
+        self._boards = unique_boards[:board_limit]
         self._http = http
         self._normalizer = normalizer
         self._cache: tuple[JobPosting, ...] | None = None

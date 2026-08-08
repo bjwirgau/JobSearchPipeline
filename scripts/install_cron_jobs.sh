@@ -8,6 +8,7 @@ crawler_schedule="${JOB_AGENT_CRAWLER_CRON_SCHEDULE:-*/5 * * * *}"
 prospect_schedule="${JOB_AGENT_PROSPECT_SEARCH_CRON_SCHEDULE:-4 * * * *}"
 matcher_schedule="${JOB_AGENT_MATCHER_CRON_SCHEDULE:-* * * * *}"
 search_limit="${JOB_AGENT_GREENHOUSE_SEARCH_LIMIT:-100}"
+board_limit="${JOB_AGENT_GREENHOUSE_BOARD_LIMIT:-25}"
 match_limit="${JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN:-15}"
 begin_marker="# BEGIN job-agent managed cron jobs"
 end_marker="# END job-agent managed cron jobs"
@@ -38,6 +39,7 @@ awk \
 {
     printf '%s\n' "$begin_marker"
     printf 'JOB_AGENT_GREENHOUSE_SEARCH_LIMIT=%s\n' "$search_limit"
+    printf 'JOB_AGENT_GREENHOUSE_BOARD_LIMIT=%s\n' "$board_limit"
     printf 'JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN=%s\n' "$match_limit"
     printf '%s %s/scripts/run_greenhouse_crawler.sh\n' \
         "$crawler_schedule" "$project_root"

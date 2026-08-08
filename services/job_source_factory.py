@@ -34,6 +34,7 @@ def build_job_sources(
     *,
     skill_vocabulary: Sequence[str] = (),
     greenhouse_boards: Sequence[GreenhouseBoard] = (),
+    greenhouse_board_limit: int | None = None,
 ) -> tuple[JobSourceService, ...]:
     http = RequestsHttpClient(
         timeout_seconds=settings.http_timeout_seconds,
@@ -93,11 +94,16 @@ def build_job_sources(
         )
 
     # Direct ATS and career-page adapters are optional supplemental sources.
-    greenhouse_boards_by_token = {
-        board.token: board for board in greenhouse_boards
-    }
+    board_limit = (
+        settings.greenhouse_board_limit
+        if greenhouse_board_limit is None
+        else greenhouse_board_limit
+    )
+    greenhouse_boards_by_token: dict[str, GreenhouseBoard] = {}
     for target in settings.greenhouse_boards:
         board = GreenhouseBoard(target.company, target.value)
+        greenhouse_boards_by_token.setdefault(board.token, board)
+    for board in greenhouse_boards:
         greenhouse_boards_by_token.setdefault(board.token, board)
     if greenhouse_boards_by_token:
         sources.append(
@@ -105,6 +111,7 @@ def build_job_sources(
                 tuple(greenhouse_boards_by_token.values()),
                 http=http,
                 normalizer=normalizer,
+                board_limit=board_limit,
             )
         )
     if settings.lever_sites:

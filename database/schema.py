@@ -7,7 +7,7 @@ from utils.dates import to_utc_naive, utc_now
 from .connection import Database, MySQLCursor
 
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA_STATEMENTS = (
     """
@@ -51,12 +51,14 @@ SCHEMA_STATEMENTS = (
         company_name VARCHAR(255) NOT NULL,
         board_token VARCHAR(191) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
         company_url VARCHAR(512) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+        last_job_search_at DATETIME(6) NULL,
         created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
         updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
             ON UPDATE CURRENT_TIMESTAMP(6),
         PRIMARY KEY (company_id),
         UNIQUE KEY uq_company_prospects_url (company_url),
-        KEY idx_company_prospects_board_token (board_token)
+        KEY idx_company_prospects_board_token (board_token),
+        KEY idx_company_prospects_job_search (last_job_search_at)
     ) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci
     """,
     """
@@ -106,6 +108,8 @@ def initialize_schema(database: Database) -> None:
             _add_job_prospect_timestamps(database, cursor)
         if current_version < 7:
             _add_job_prospect_payload(database, cursor)
+        if current_version < 8:
+            _add_company_prospect_job_search_timestamp(database, cursor)
         cursor.execute(
             """
             INSERT IGNORE INTO schema_migrations(version, applied_at)
@@ -185,3 +189,27 @@ def _add_job_prospect_payload(
     )
     if not cursor.fetchone():
         cursor.execute("ALTER TABLE job_prospects ADD COLUMN job_data JSON NULL")
+
+
+def _add_company_prospect_job_search_timestamp(
+    database: Database,
+    cursor: MySQLCursor,
+) -> None:
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME AS app_column_name
+        FROM information_schema.columns
+        WHERE table_schema = %s
+          AND table_name = 'company_prospects'
+          AND column_name = 'last_job_search_at'
+        """,
+        (database.config.database,),
+    )
+    if not cursor.fetchone():
+        cursor.execute(
+            """
+            ALTER TABLE company_prospects
+            ADD COLUMN last_job_search_at DATETIME(6) NULL,
+            ADD KEY idx_company_prospects_job_search (last_job_search_at)
+            """
+        )

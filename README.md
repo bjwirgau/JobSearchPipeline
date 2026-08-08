@@ -109,8 +109,10 @@ Candidate identity and preferences remain in `data/candidate_profile.json`;
 application records are not persisted in the current schema.
 
 Greenhouse company discovery is stored separately in `company_prospects` with
-`company_id`, `company_name`, `board_token`, `company_url`, `created_at`, and
-`updated_at`. The company URL is the canonical public Greenhouse board URL.
+`company_id`, `company_name`, `board_token`, `company_url`,
+`last_job_search_at`, `created_at`, and `updated_at`. The company URL is the
+canonical public Greenhouse board URL. The search timestamp rotates limited
+board batches across runs.
 
 Page-level crawl history is stored in `crawl_pages`. Each row records the page
 URL, source, page type, last outcome, last and next crawl times, and the most
@@ -229,10 +231,18 @@ Both values are required. This provider searches U.S. federal job announcements 
 
 ##### Greenhouse
 
-The normal search command automatically loads all board tokens collected in
+The normal search command loads a rotating batch of board tokens collected in
 `company_prospects`. No company-specific environment configuration is required
-for crawled boards. To add a board that the crawler has not discovered, configure
-a company display name and its board token:
+for crawled boards. Configure the maximum number of boards fetched by one
+search run; the default is 25:
+
+```env
+JOB_AGENT_GREENHOUSE_BOARD_LIMIT=25
+```
+
+Unsearched boards are selected first, followed by the least recently searched
+boards. To add a board that the crawler has not discovered, configure a company
+display name and its board token:
 
 ```env
 JOB_AGENT_GREENHOUSE_BOARDS=Example Company=example
@@ -244,10 +254,12 @@ The board token is the path segment in `https://boards.greenhouse.io/{board_toke
 JOB_AGENT_GREENHOUSE_BOARDS=Company One=companyone;Company Two=companytwo
 ```
 
-Stored boards take precedence when a configured entry uses the same token. Each
-board feed is downloaded once per search run, shared across all title queries,
-and filtered using the normal search criteria. Board requests are concurrency
-limited to avoid opening an unbounded number of connections.
+Manually configured boards take precedence when a stored entry uses the same
+token and count toward the per-run limit. Each selected board feed is downloaded
+once per search run, shared across all title queries, and filtered using the
+normal search criteria. Board requests are also concurrency limited to avoid
+opening an unbounded number of connections. Override the environment setting
+for one command with `--greenhouse-board-limit`.
 
 ##### Crawl for Greenhouse companies
 
@@ -292,10 +304,10 @@ and the application continues to load database and crawler settings from
 
 ### Scheduled Greenhouse prospect search and matching
 
-The prospect-search runner reads every Greenhouse board token currently stored
-in `company_prospects`, searches those boards using the candidate's configured
-titles and requirements, and persists normalized postings in `job_prospects`.
-It does not make Gemini requests.
+The prospect-search runner reserves the next rotating batch of Greenhouse board
+tokens from `company_prospects`, searches those boards using the candidate's
+configured titles and requirements, and persists normalized postings in
+`job_prospects`. It does not make Gemini requests.
 
 The script prevents overlapping searches and appends output to
 `logs/greenhouse-prospect-search.log`. It defaults to 100 results per title
@@ -303,6 +315,7 @@ query. Override that limit through the cron environment if needed:
 
 ```cron
 JOB_AGENT_GREENHOUSE_SEARCH_LIMIT=100
+JOB_AGENT_GREENHOUSE_BOARD_LIMIT=25
 4 * * * * /opt/job-agent/scripts/run_greenhouse_prospect_search.sh
 ```
 
@@ -323,6 +336,7 @@ these values in the project's `.env`:
 
 ```env
 JOB_AGENT_SEARCH_ENABLED=true
+JOB_AGENT_GREENHOUSE_BOARD_LIMIT=25
 GEMINI_API_KEY=your-api-key
 ```
 
@@ -365,6 +379,7 @@ The equivalent application command is:
 ```bash
 python3 app.py --search \
   --source greenhouse \
+  --greenhouse-board-limit 25 \
   --limit 100
 
 python3 app.py --match-prospects --match-limit 15
@@ -508,6 +523,7 @@ python3 app.py --search \
   --title "AI Engineer" \
   --remote \
   --remote-country us \
+  --greenhouse-board-limit 25 \
   --limit 25
 ```
 

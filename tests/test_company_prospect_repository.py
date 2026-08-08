@@ -56,6 +56,33 @@ class CompanyProspectRepositoryTests(unittest.TestCase):
     def test_list_all_rejects_a_non_positive_limit(self) -> None:
         with self.assertRaisesRegex(ValueError, "greater than zero"):
             self.repository.list_all(limit=0)
+        with self.assertRaisesRegex(ValueError, "greater than zero"):
+            self.repository.reserve_for_job_search(limit=0)
+
+    def test_job_search_reservations_rotate_through_oldest_boards(self) -> None:
+        alpha = CompanyProspect.from_board(
+            company_name="Alpha",
+            board_token="alpha",
+            company_url="https://job-boards.greenhouse.io/alpha",
+        )
+        beta = CompanyProspect.from_board(
+            company_name="Beta",
+            board_token="beta",
+            company_url="https://job-boards.greenhouse.io/beta",
+        )
+        self.repository.save_all((alpha, beta))
+
+        first = self.repository.reserve_for_job_search(limit=1)
+        second = self.repository.reserve_for_job_search(limit=1)
+
+        self.assertEqual(first[0].company_id, alpha.company_id)
+        self.assertEqual(second[0].company_id, beta.company_id)
+        self.assertIsNotNone(
+            self.repository.get(alpha.company_id).last_job_search_at
+        )
+        self.assertIsNotNone(
+            self.repository.get(beta.company_id).last_job_search_at
+        )
 
     def test_rejects_non_greenhouse_company_urls(self) -> None:
         with self.assertRaisesRegex(ValueError, "canonical Greenhouse"):

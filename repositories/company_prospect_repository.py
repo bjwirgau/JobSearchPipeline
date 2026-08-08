@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from database import Database
 from database.connection import MySQLCursor
 from models import CompanyProspect
+from utils.dates import to_utc_naive, utc_now
 
 
 class CompanyProspectRepository:
@@ -50,7 +51,7 @@ class CompanyProspectRepository:
             cursor.execute(
                 """
                 SELECT company_id, company_name, board_token, company_url,
-                       created_at, updated_at
+                       last_job_search_at, created_at, updated_at
                 FROM company_prospects
                 WHERE company_id = %s
                 """,
@@ -70,7 +71,7 @@ class CompanyProspectRepository:
             raise ValueError("limit must be greater than zero")
         query = """
                 SELECT company_id, company_name, board_token, company_url,
-                       created_at, updated_at
+                       last_job_search_at, created_at, updated_at
                 FROM company_prospects
                 ORDER BY company_name, board_token
                 """
@@ -81,4 +82,35 @@ class CompanyProspectRepository:
         with self._database.cursor() as cursor:
             cursor.execute(query, parameters)
             rows = cursor.fetchall()
+        return tuple(CompanyProspect.from_row(row) for row in rows)
+
+    def reserve_for_job_search(self, *, limit: int) -> tuple[CompanyProspect, ...]:
+        if limit <= 0:
+            raise ValueError("limit must be greater than zero")
+        selected_at = to_utc_naive(utc_now())
+        with self._database.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT company_id, company_name, board_token, company_url,
+                       last_job_search_at, created_at, updated_at
+                FROM company_prospects
+                ORDER BY (last_job_search_at IS NOT NULL), last_job_search_at,
+                         company_name, board_token
+                LIMIT %s
+                FOR UPDATE
+                """,
+                (limit,),
+            )
+            rows = cursor.fetchall()
+            if rows:
+                company_ids = tuple(str(row["company_id"]) for row in rows)
+                placeholders = ", ".join("%s" for _ in company_ids)
+                cursor.execute(
+                    f"""
+                    UPDATE company_prospects
+                    SET last_job_search_at = %s
+                    WHERE company_id IN ({placeholders})
+                    """,
+                    (selected_at, *company_ids),
+                )
         return tuple(CompanyProspect.from_row(row) for row in rows)

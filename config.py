@@ -96,6 +96,7 @@ class Settings:
     apify_api_token: str | None = None
     apify_linkedin_actor_id: str = "automation-lab/linkedin-jobs-scraper"
     apify_timeout_seconds: float = 120.0
+    greenhouse_board_limit: int = 25
     greenhouse_boards: tuple[SourceTarget, ...] = ()
     lever_sites: tuple[SourceTarget, ...] = ()
     workday_tenants: tuple[SourceTarget, ...] = ()
@@ -179,6 +180,9 @@ class Settings:
             ),
             apify_timeout_seconds=float(
                 values.get("JOB_AGENT_APIFY_TIMEOUT_SECONDS", "120")
+            ),
+            greenhouse_board_limit=int(
+                values.get("JOB_AGENT_GREENHOUSE_BOARD_LIMIT", "25")
             ),
             greenhouse_boards=_source_targets(
                 values.get("JOB_AGENT_GREENHOUSE_BOARDS")
@@ -290,6 +294,10 @@ class Settings:
         if self.apify_timeout_seconds <= 0 or self.apify_timeout_seconds > 300:
             raise ValueError(
                 "JOB_AGENT_APIFY_TIMEOUT_SECONDS must be between 1 and 300"
+            )
+        if not 1 <= self.greenhouse_board_limit <= 1_000:
+            raise ValueError(
+                "JOB_AGENT_GREENHOUSE_BOARD_LIMIT must be between 1 and 1000"
             )
         if self.browser_fallback not in {"none", "playwright", "selenium"}:
             raise ValueError("JOB_AGENT_BROWSER_FALLBACK must be none, playwright, or selenium")

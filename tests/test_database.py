@@ -53,11 +53,12 @@ class DatabaseTests(unittest.TestCase):
         self.assertFalse(self.server.resume_candidate_foreign_key)
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {2, 7},
+            {2, 8},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)
         self.assertIn("job_data", self.server.job_prospect_columns)
+        self.assertIn("last_job_search_at", self.server.company_prospect_columns)
 
     def test_version_three_schema_adds_job_prospect_timestamps(self) -> None:
         self.server.tables = {
@@ -95,7 +96,7 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {3, 7},
+            {3, 8},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)

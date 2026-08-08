@@ -23,6 +23,7 @@ class CompanyProspect:
     company_name: str
     board_token: str
     company_url: str
+    last_job_search_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -37,7 +38,7 @@ class CompanyProspect:
         host = (parts.hostname or "").casefold()
         if parts.scheme != "https" or host not in GREENHOUSE_BOARD_HOSTS:
             raise ValueError("company_url must be a canonical Greenhouse board URL")
-        for field_name in ("created_at", "updated_at"):
+        for field_name in ("last_job_search_at", "created_at", "updated_at"):
             value = getattr(self, field_name)
             if value is not None:
                 object.__setattr__(self, field_name, ensure_utc(value))
@@ -64,6 +65,7 @@ class CompanyProspect:
             company_name=str(row["company_name"]),
             board_token=str(row["board_token"]),
             company_url=str(row["company_url"]),
+            last_job_search_at=_timestamp(row.get("last_job_search_at")),
             created_at=_timestamp(row.get("created_at")),
             updated_at=_timestamp(row.get("updated_at")),
         )
@@ -74,6 +76,7 @@ class CompanyProspect:
             "company_name": self.company_name,
             "board_token": self.board_token,
             "company_url": self.company_url,
+            "last_job_search_at": to_iso(self.last_job_search_at),
             "created_at": to_iso(self.created_at),
             "updated_at": to_iso(self.updated_at),
         }

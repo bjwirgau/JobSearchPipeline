@@ -204,6 +204,41 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
         await source.search(replace(self.query, title="Platform Engineer"), limit=10)
         self.assertEqual(len(self.http.calls), 1)
 
+    async def test_greenhouse_limits_boards_fetched_per_search_run(self) -> None:
+        boards = tuple(
+            GreenhouseBoard(f"Company {token}", token)
+            for token in ("first", "second", "third")
+        )
+        for token in ("first", "second"):
+            self.http.add(
+                "GET",
+                f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs",
+                "greenhouse.json",
+                "application/json",
+            )
+        source = GreenhouseJobSource(
+            boards,
+            http=self.http,
+            normalizer=self.normalizer,
+            board_limit=2,
+        )
+
+        await source.search(self.query, limit=10)
+
+        requested_urls = tuple(call[1] for call in self.http.calls)
+        self.assertEqual(len(requested_urls), 2)
+        self.assertTrue(requested_urls[0].endswith("/first/jobs"))
+        self.assertTrue(requested_urls[1].endswith("/second/jobs"))
+        self.assertFalse(any("/third/jobs" in url for url in requested_urls))
+
+        with self.assertRaisesRegex(ValueError, "board limit"):
+            GreenhouseJobSource(
+                boards,
+                http=self.http,
+                normalizer=self.normalizer,
+                board_limit=0,
+            )
+
     async def test_lever_normalizes_structured_salary_and_employment(self) -> None:
         url = "https://api.lever.co/v0/postings/example"
         self.http.add("GET", url, "lever.json", "application/json")

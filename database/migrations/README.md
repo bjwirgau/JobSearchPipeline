@@ -11,3 +11,5 @@ The complete MySQL schema for new databases is defined in `database/schema.py`. 
 - `006_crawl_pages.sql` adds page-level crawl history and revisit eligibility.
 - `007_job_prospect_payload.sql` stores normalized job evidence for asynchronous
   LLM matching.
+- `008_company_prospect_job_search.sql` tracks rotating Greenhouse board-search
+  batches.

@@ -35,6 +35,8 @@ class GreenhouseProspectSearchScriptTests(unittest.TestCase):
         self.assertIn("greenhouse-prospect-search.lock", script)
         self.assertIn("greenhouse-prospect-search.log", script)
         self.assertIn("JOB_AGENT_GREENHOUSE_SEARCH_LIMIT", script)
+        self.assertIn("JOB_AGENT_GREENHOUSE_BOARD_LIMIT", script)
+        self.assertIn("--greenhouse-board-limit", script)
 
     def test_matcher_is_executable_rate_limited_and_valid_shell(self) -> None:
         self.assertTrue(MATCHER_PATH.stat().st_mode & stat.S_IXUSR)

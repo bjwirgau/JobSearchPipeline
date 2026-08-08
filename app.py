@@ -70,7 +70,12 @@ class JobAgentContainer:
     job_matching_workflow: JobMatchingWorkflow
 
 
-def build_container(settings: Settings | None = None) -> JobAgentContainer:
+def build_container(
+    settings: Settings | None = None,
+    *,
+    greenhouse_board_limit: int | None = None,
+    rotate_greenhouse_boards: bool = False,
+) -> JobAgentContainer:
     settings = settings or Settings.from_env()
     settings.prepare_directories()
     database = Database(
@@ -122,13 +127,35 @@ def build_container(settings: Settings | None = None) -> JobAgentContainer:
             error,
         )
         skill_vocabulary = ()
+    board_limit = (
+        settings.greenhouse_board_limit
+        if greenhouse_board_limit is None
+        else greenhouse_board_limit
+    )
+    configured_board_tokens = {
+        target.value.strip().casefold()
+        for target in settings.greenhouse_boards
+        if target.value.strip()
+    }
+    stored_board_limit = max(0, board_limit - len(configured_board_tokens))
+    if stored_board_limit and rotate_greenhouse_boards:
+        stored_greenhouse_prospects = company_prospects.reserve_for_job_search(
+            limit=stored_board_limit
+        )
+    elif stored_board_limit:
+        stored_greenhouse_prospects = company_prospects.list_all(
+            limit=stored_board_limit
+        )
+    else:
+        stored_greenhouse_prospects = ()
     job_sources = build_job_sources(
         settings,
         skill_vocabulary=skill_vocabulary,
         greenhouse_boards=tuple(
             GreenhouseBoard(prospect.company_name, prospect.board_token)
-            for prospect in company_prospects.list_all()
+            for prospect in stored_greenhouse_prospects
         ),
+        greenhouse_board_limit=board_limit,
     )
 
     search_agent = SearchAgent(
@@ -251,6 +278,12 @@ def _arguments(
         help="oldest accepted posting in days",
     )
     parser.add_argument("--limit", type=int, default=25, help="results per source query")
+    parser.add_argument(
+        "--greenhouse-board-limit",
+        type=int,
+        default=settings.greenhouse_board_limit if settings else 25,
+        help="maximum Greenhouse boards fetched during one search",
+    )
     arguments = parser.parse_args(argv)
     selected_commands = sum(
         (
@@ -266,6 +299,8 @@ def _arguments(
         )
     if not 1 <= arguments.match_limit <= 15:
         parser.error("--match-limit must be between 1 and 15")
+    if not 1 <= arguments.greenhouse_board_limit <= 1_000:
+        parser.error("--greenhouse-board-limit must be between 1 and 1000")
     if arguments.dry_run and not arguments.search:
         parser.error("--dry-run requires --search")
     unsupported_dry_run_sources = tuple(
@@ -582,7 +617,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logging(settings.log_level)
     if arguments.search and arguments.dry_run:
         return _run_apify_dry_run(settings, arguments)
-    container = build_container(settings)
+    requested_sources = {
+        source.strip().casefold() for source in arguments.source if source.strip()
+    }
+    searches_greenhouse = arguments.search and (
+        not requested_sources or "greenhouse" in requested_sources
+    )
+    container = build_container(
+        settings,
+        greenhouse_board_limit=arguments.greenhouse_board_limit,
+        rotate_greenhouse_boards=searches_greenhouse,
+    )
     logging.getLogger(__name__).info(
         "Job Agent Phase 3 initialized "
         "(search=%s, database=%s@%s:%s/%s)",

@@ -9,6 +9,7 @@ log_dir="$project_root/logs"
 log_file="$log_dir/greenhouse-prospect-search.log"
 lock_dir="${TMPDIR:-/tmp}/job-agent-greenhouse-prospect-search.lock"
 search_limit="${JOB_AGENT_GREENHOUSE_SEARCH_LIMIT:-100}"
+board_limit="${JOB_AGENT_GREENHOUSE_BOARD_LIMIT:-25}"
 
 mkdir -p "$log_dir"
 exec >>"$log_file" 2>&1
@@ -26,6 +27,18 @@ case "$search_limit" in
 esac
 if [ "$search_limit" -le 0 ]; then
     printf '%s JOB_AGENT_GREENHOUSE_SEARCH_LIMIT must be greater than zero.\n' \
+        "$(timestamp)"
+    exit 2
+fi
+case "$board_limit" in
+    ''|*[!0-9]*)
+        printf '%s Invalid JOB_AGENT_GREENHOUSE_BOARD_LIMIT: %s\n' \
+            "$(timestamp)" "$board_limit"
+        exit 2
+        ;;
+esac
+if [ "$board_limit" -le 0 ] || [ "$board_limit" -gt 1000 ]; then
+    printf '%s JOB_AGENT_GREENHOUSE_BOARD_LIMIT must be between 1 and 1000.\n' \
         "$(timestamp)"
     exit 2
 fi
@@ -65,14 +78,15 @@ if [ ! -x "$python_path" ]; then
     exit 1
 fi
 
-printf '%s Starting Greenhouse prospect search with limit %s.\n' \
-    "$(timestamp)" "$search_limit"
+printf '%s Starting Greenhouse prospect search with result limit %s and board limit %s.\n' \
+    "$(timestamp)" "$search_limit" "$board_limit"
 cd "$project_root"
 
 set +e
 "$python_path" "$project_root/app.py" \
     --search \
     --source greenhouse \
+    --greenhouse-board-limit "$board_limit" \
     --limit "$search_limit"
 status=$?
 set -e

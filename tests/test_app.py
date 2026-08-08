@@ -191,6 +191,21 @@ class ApplicationCriteriaTests(unittest.TestCase):
             )
         self.assertIn("between 1 and 15", errors.getvalue())
 
+    def test_greenhouse_board_limit_is_configurable_and_validated(self) -> None:
+        arguments = _arguments(
+            ["--search", "--greenhouse-board-limit", "10"],
+            settings=self.settings,
+        )
+
+        self.assertEqual(arguments.greenhouse_board_limit, 10)
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            _arguments(
+                ["--search", "--greenhouse-board-limit", "1001"],
+                settings=self.settings,
+            )
+        self.assertIn("between 1 and 1000", errors.getvalue())
+
     def test_company_crawler_results_render_as_a_named_grid(self) -> None:
         grid = _format_company_grid(
             (

@@ -95,6 +95,13 @@ class CountryEligibilityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "MATCHING_MAX_REQUESTS_PER_RUN"):
             Settings.from_env({"JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN": "16"})
 
+    def test_greenhouse_board_limit_is_validated(self) -> None:
+        settings = Settings.from_env({"JOB_AGENT_GREENHOUSE_BOARD_LIMIT": "10"})
+
+        self.assertEqual(settings.greenhouse_board_limit, 10)
+        with self.assertRaisesRegex(ValueError, "GREENHOUSE_BOARD_LIMIT"):
+            Settings.from_env({"JOB_AGENT_GREENHOUSE_BOARD_LIMIT": "0"})
+
 
 if __name__ == "__main__":
     unittest.main()
