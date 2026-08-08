@@ -182,9 +182,17 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
             normalizer=self.normalizer,
         )
 
-        jobs = await source.search(self.query, limit=10)
+        with self.assertLogs("services.job_sources.greenhouse", level="INFO") as logs:
+            jobs = await source.search(self.query, limit=10)
 
         self.assertEqual(len(jobs), 1)
+        self.assertTrue(
+            any(
+                "Fetching Greenhouse job board for Example Company (token: example)"
+                in entry
+                for entry in logs.output
+            )
+        )
         job = jobs[0]
         self.assertEqual(job.source, "greenhouse")
         self.assertEqual(job.title, "Senior Software Engineer")

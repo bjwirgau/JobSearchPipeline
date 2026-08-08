@@ -89,6 +89,11 @@ class GreenhouseJobSource:
     async def _fetch_board(self, board: GreenhouseBoard) -> tuple[JobPosting, ...]:
         url = f"{self.API_BASE}/{quote(board.token, safe='')}/jobs"
         async with self._request_limit:
+            LOGGER.info(
+                "Fetching Greenhouse job board for %s (token: %s)",
+                board.company,
+                board.token,
+            )
             response = await self._http.get(url, params={"content": "true"})
         payload = response.json()
         if not isinstance(payload, Mapping) or not isinstance(payload.get("jobs"), list):

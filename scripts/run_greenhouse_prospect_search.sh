@@ -8,7 +8,7 @@ project_root=$(dirname -- "$script_dir")
 log_dir="$project_root/logs"
 log_file="$log_dir/greenhouse-prospect-search.log"
 lock_dir="${TMPDIR:-/tmp}/job-agent-greenhouse-prospect-search.lock"
-search_limit="${JOB_AGENT_GREENHOUSE_SEARCH_LIMIT:-100}"
+search_limit="${JOB_AGENT_GREENHOUSE_SEARCH_LIMIT:-10}"
 
 mkdir -p "$log_dir"
 exec >>"$log_file" 2>&1
