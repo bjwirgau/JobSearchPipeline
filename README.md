@@ -100,7 +100,8 @@ Normalized jobs consistently include source identity, title, company, URL, locat
 
 MySQL stores the review-oriented projection in `job_prospects` with `job_id`,
 `match`, `title`, `company`, `location`, `salary`, `source`, `url`, `job_data`,
-`created_at`, and `updated_at` columns. `job_data` retains the complete
+`resume_generation_candidate`, `resume_generation_model`, `created_at`, and
+`updated_at` columns. `job_data` retains the complete
 normalized posting needed by the asynchronous matcher. The database assigns both UTC timestamps when a
 prospect is first stored, preserves `created_at`, and refreshes `updated_at`
 when the prospect or its match score changes. The match is nullable during
@@ -143,6 +144,8 @@ JOB_AGENT_GEMINI_TIMEOUT_SECONDS=60
 JOB_AGENT_MATCHING_CONCURRENCY=1
 JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN=15
 JOB_AGENT_MATCHING_PROMPT=prompts/score_match.txt
+JOB_AGENT_RESUME_CANDIDATE_THRESHOLD=0.85
+JOB_AGENT_RESUME_GENERATION_MODEL=gpt-5.4
 ```
 
 `gemini-3.5-flash-lite` is the default because it is optimized for high-volume
@@ -162,6 +165,16 @@ and may involve human review. Do not send sensitive or personally identifying
 resume data through the unpaid tier; review the
 [Gemini API terms](https://ai.google.dev/gemini-api/terms) before enabling the
 scheduled search.
+
+After Gemini matching, a score strictly greater than
+`JOB_AGENT_RESUME_CANDIDATE_THRESHOLD` marks the stored job as a resume
+generation candidate. The intended generation model is stored alongside the
+job and defaults to the official `gpt-5.4` model ID. Schema migration 9 also
+backfills existing matches above 85%. This stage only creates the durable queue;
+it does not send candidate data to OpenAI or generate a document yet. A later
+resume-generation worker can consume these marked rows after an explicit review
+gate. GPT-5.4 supports text output through the Responses API; see the
+[official model documentation](https://developers.openai.com/api/docs/models/gpt-5.4).
 
 ### Enable and Configure Job Searching
 

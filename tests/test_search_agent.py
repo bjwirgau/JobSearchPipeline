@@ -153,6 +153,9 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
 
         prospect = self.repository.get(job.job_id)
         self.assertAlmostEqual(prospect.match, match_result.matches[0].score)
+        self.assertTrue(prospect.resume_generation_candidate)
+        self.assertEqual(prospect.resume_generation_model, "gpt-5.4")
+        self.assertEqual(match_result.resume_candidates, (job,))
         self.assertEqual(len(llm.prompts), 1)
 
         repeated = await matching_workflow.run(candidate)

@@ -12,6 +12,10 @@ from utils.dates import ensure_utc, to_iso
 from .job import JobPosting
 
 
+DEFAULT_RESUME_CANDIDATE_THRESHOLD = 0.85
+DEFAULT_RESUME_GENERATION_MODEL = "gpt-5.4"
+
+
 @dataclass(frozen=True, slots=True)
 class JobProspect:
     job_id: str
@@ -22,6 +26,8 @@ class JobProspect:
     salary: str
     source: str
     url: str
+    resume_generation_candidate: bool = False
+    resume_generation_model: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -33,6 +39,15 @@ class JobProspect:
             object.__setattr__(self, field_name, value)
         if self.match is not None and not 0 <= self.match <= 1:
             raise ValueError("match must be between 0 and 1")
+        if self.resume_generation_model is not None:
+            model = self.resume_generation_model.strip()
+            if not model:
+                raise ValueError("resume_generation_model must not be empty")
+            object.__setattr__(self, "resume_generation_model", model)
+        if self.resume_generation_candidate and self.resume_generation_model is None:
+            raise ValueError(
+                "resume_generation_model is required for a resume candidate"
+            )
         for field_name in ("created_at", "updated_at"):
             value = getattr(self, field_name)
             if value is not None:
@@ -44,6 +59,8 @@ class JobProspect:
         job: JobPosting,
         *,
         match: float | None = None,
+        resume_generation_candidate: bool = False,
+        resume_generation_model: str | None = None,
     ) -> "JobProspect":
         return cls(
             job_id=job.job_id,
@@ -54,6 +71,8 @@ class JobProspect:
             salary=_format_salary(job),
             source=job.source,
             url=job.url,
+            resume_generation_candidate=resume_generation_candidate,
+            resume_generation_model=resume_generation_model,
         )
 
     @classmethod
@@ -72,6 +91,14 @@ class JobProspect:
             salary=str(row["salary"]),
             source=str(row["source"]),
             url=str(row["url"]),
+            resume_generation_candidate=bool(
+                row.get("resume_generation_candidate", False)
+            ),
+            resume_generation_model=(
+                str(row["resume_generation_model"])
+                if row.get("resume_generation_model") is not None
+                else None
+            ),
             created_at=_timestamp(row.get("created_at")),
             updated_at=_timestamp(row.get("updated_at")),
         )
@@ -86,6 +113,8 @@ class JobProspect:
             "salary": self.salary,
             "source": self.source,
             "url": self.url,
+            "resume_generation_candidate": self.resume_generation_candidate,
+            "resume_generation_model": self.resume_generation_model,
             "created_at": to_iso(self.created_at),
             "updated_at": to_iso(self.updated_at),
         }

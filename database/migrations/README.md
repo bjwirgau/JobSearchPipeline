@@ -13,3 +13,5 @@ The complete MySQL schema for new databases is defined in `database/schema.py`. 
   LLM matching.
 - `008_company_prospect_job_search.sql` tracks rotating Greenhouse board-search
   batches.
+- `009_job_resume_candidates.sql` marks matches above the resume-generation
+  threshold and records the configured generation model.

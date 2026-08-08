@@ -102,6 +102,8 @@ class FakeMySQLCursor:
                         "source",
                         "url",
                         "job_data",
+                        "resume_generation_candidate",
+                        "resume_generation_model",
                         "created_at",
                         "updated_at",
                     }
@@ -138,6 +140,11 @@ class FakeMySQLCursor:
             available_columns = self._connection.job_prospect_columns
             if "column_name = 'job_data'" in statement:
                 requested_columns = {"job_data"}
+            elif "'resume_generation_candidate'" in statement:
+                requested_columns = {
+                    "resume_generation_candidate",
+                    "resume_generation_model",
+                }
             elif "column_name = 'last_job_search_at'" in statement:
                 requested_columns = {"last_job_search_at"}
                 available_columns = self._connection.company_prospect_columns
@@ -162,6 +169,18 @@ class FakeMySQLCursor:
                 self._connection.job_prospect_columns.add("job_data")
                 for row in self._connection.tables["job_prospects"].values():
                     row["job_data"] = None
+            if "add column resume_generation_candidate" in statement:
+                self._connection.job_prospect_columns.add(
+                    "resume_generation_candidate"
+                )
+                for row in self._connection.tables["job_prospects"].values():
+                    row["resume_generation_candidate"] = False
+            if "add column resume_generation_model" in statement:
+                self._connection.job_prospect_columns.add(
+                    "resume_generation_model"
+                )
+                for row in self._connection.tables["job_prospects"].values():
+                    row["resume_generation_model"] = None
             return
         if statement.startswith("alter table company_prospects"):
             if "add column last_job_search_at" in statement:
@@ -204,6 +223,8 @@ class FakeMySQLCursor:
                 source,
                 url,
                 job_data,
+                resume_generation_candidate,
+                resume_generation_model,
             ) = values
             existing = self._connection.tables["job_prospects"].get(job_id)
             now = to_utc_naive(utc_now())
@@ -224,6 +245,18 @@ class FakeMySQLCursor:
                     job_data
                     if job_data is not None
                     else existing.get("job_data") if existing else None
+                ),
+                "resume_generation_candidate": (
+                    resume_generation_candidate
+                    if existing is None
+                    or "resume_generation_candidate = incoming" in statement
+                    else existing.get("resume_generation_candidate", False)
+                ),
+                "resume_generation_model": (
+                    resume_generation_model
+                    if existing is None
+                    or "resume_generation_model = incoming" in statement
+                    else existing.get("resume_generation_model")
                 ),
                 "created_at": existing["created_at"] if existing else now,
                 "updated_at": now,
@@ -275,10 +308,34 @@ class FakeMySQLCursor:
             self.rowcount = 1
             return
         if statement.startswith("update job_prospects"):
-            match, job_id = values
+            if "where `match` >" in statement:
+                model, threshold = values
+                for row in self._connection.tables["job_prospects"].values():
+                    if (
+                        row.get("match") is not None
+                        and row["match"] > threshold
+                        and not row.get("resume_generation_candidate", False)
+                    ):
+                        row["resume_generation_candidate"] = True
+                        row["resume_generation_model"] = model
+                        self.rowcount += 1
+                return
+            if "where resume_generation_candidate = true" in statement:
+                (model,) = values
+                for row in self._connection.tables["job_prospects"].values():
+                    if (
+                        row.get("resume_generation_candidate", False)
+                        and row.get("resume_generation_model") is None
+                    ):
+                        row["resume_generation_model"] = model
+                        self.rowcount += 1
+                return
+            match, resume_candidate, resume_model, job_id = values
             row = self._connection.tables["job_prospects"].get(job_id)
             if row:
                 row["match"] = match
+                row["resume_generation_candidate"] = resume_candidate
+                row["resume_generation_model"] = resume_model
                 row["updated_at"] = to_utc_naive(utc_now())
                 self.rowcount = 1
             return
@@ -315,6 +372,24 @@ class FakeMySQLCursor:
                     for row in self._connection.tables["job_prospects"].values()
                     if row["job_id"] in selected_ids and row["match"] is not None
                 ]
+                return
+            if "where resume_generation_candidate = true" in statement:
+                limit = int(values[0])
+                rows = sorted(
+                    (
+                        row
+                        for row in self._connection.tables[
+                            "job_prospects"
+                        ].values()
+                        if row.get("resume_generation_candidate", False)
+                    ),
+                    key=lambda row: (
+                        -(row["match"] or 0),
+                        row["title"],
+                        row["company"],
+                    ),
+                )[:limit]
+                self._rows = [dict(row) for row in rows]
                 return
             limit = int(values[0])
             rows = sorted(

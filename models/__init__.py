@@ -16,7 +16,11 @@ from .job import (
     SearchQuery,
     SearchRunResult,
 )
-from .job_prospect import JobProspect
+from .job_prospect import (
+    DEFAULT_RESUME_CANDIDATE_THRESHOLD,
+    DEFAULT_RESUME_GENERATION_MODEL,
+    JobProspect,
+)
 from .match import MatchBreakdown, MatchResult
 from .resume import ResumeKnowledgeBase, ResumeRole
 from .workflow import StageRecord, WorkflowRun, WorkflowStage, WorkflowStatus
@@ -31,6 +35,8 @@ __all__ = [
     "CrawlPageType",
     "CrawlStatus",
     "DocumentArtifact",
+    "DEFAULT_RESUME_CANDIDATE_THRESHOLD",
+    "DEFAULT_RESUME_GENERATION_MODEL",
     "JobPosting",
     "JobProspect",
     "MatchBreakdown",

@@ -7,6 +7,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
+from models import (
+    DEFAULT_RESUME_CANDIDATE_THRESHOLD,
+    DEFAULT_RESUME_GENERATION_MODEL,
+)
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 GEMINI_MAX_REQUESTS_PER_RUN = 15
@@ -110,6 +115,8 @@ class Settings:
     matching_concurrency: int = 1
     matching_max_requests_per_run: int = GEMINI_MAX_REQUESTS_PER_RUN
     matching_prompt_path: Path = PROJECT_ROOT / "prompts" / "score_match.txt"
+    resume_candidate_threshold: float = DEFAULT_RESUME_CANDIDATE_THRESHOLD
+    resume_generation_model: str = DEFAULT_RESUME_GENERATION_MODEL
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
@@ -222,6 +229,16 @@ class Settings:
                 ),
                 PROJECT_ROOT,
             ),
+            resume_candidate_threshold=float(
+                values.get(
+                    "JOB_AGENT_RESUME_CANDIDATE_THRESHOLD",
+                    str(DEFAULT_RESUME_CANDIDATE_THRESHOLD),
+                )
+            ),
+            resume_generation_model=values.get(
+                "JOB_AGENT_RESUME_GENERATION_MODEL",
+                DEFAULT_RESUME_GENERATION_MODEL,
+            ).strip(),
         )
 
     def __post_init__(self) -> None:
@@ -275,6 +292,13 @@ class Settings:
             raise ValueError(
                 "JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN must be between 1 and 15"
             )
+        if not 0 <= self.resume_candidate_threshold < 1:
+            raise ValueError(
+                "JOB_AGENT_RESUME_CANDIDATE_THRESHOLD must be at least 0 "
+                "and less than 1"
+            )
+        if not self.resume_generation_model:
+            raise ValueError("JOB_AGENT_RESUME_GENERATION_MODEL must not be empty")
         if bool(self.adzuna_app_id) != bool(self.adzuna_app_key):
             raise ValueError(
                 "JOB_AGENT_ADZUNA_APP_ID and JOB_AGENT_ADZUNA_APP_KEY must be set together"

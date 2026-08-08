@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from agents import MatchingAgent, ParserAgent
 from models import (
     CandidateProfile,
+    DEFAULT_RESUME_CANDIDATE_THRESHOLD,
+    DEFAULT_RESUME_GENERATION_MODEL,
     JobPosting,
     MatchResult,
     ResumeKnowledgeBase,
@@ -34,6 +36,7 @@ class JobMatchingWorkflowResult:
     run: WorkflowRun
     jobs: tuple[JobPosting, ...]
     matches: tuple[MatchResult, ...]
+    resume_candidates: tuple[JobPosting, ...] = ()
     failures: tuple[JobMatchFailure, ...] = ()
 
 
@@ -46,10 +49,18 @@ class JobMatchingWorkflow:
         matching_agent: MatchingAgent,
         notifications: NotificationService,
         review_threshold: float = 0.7,
+        resume_candidate_threshold: float = DEFAULT_RESUME_CANDIDATE_THRESHOLD,
+        resume_generation_model: str = DEFAULT_RESUME_GENERATION_MODEL,
         max_requests_per_run: int = GEMINI_MAX_REQUESTS_PER_MINUTE,
     ) -> None:
         if not 0 <= review_threshold <= 1:
             raise ValueError("review_threshold must be between 0 and 1")
+        if not 0 <= resume_candidate_threshold < 1:
+            raise ValueError(
+                "resume_candidate_threshold must be at least 0 and less than 1"
+            )
+        if not resume_generation_model.strip():
+            raise ValueError("resume_generation_model must not be empty")
         if not 1 <= max_requests_per_run <= GEMINI_MAX_REQUESTS_PER_MINUTE:
             raise ValueError("max_requests_per_run must be between 1 and 15")
         self._repository = repository
@@ -57,6 +68,8 @@ class JobMatchingWorkflow:
         self._matching = matching_agent
         self._notifications = notifications
         self._review_threshold = review_threshold
+        self._resume_candidate_threshold = resume_candidate_threshold
+        self._resume_generation_model = resume_generation_model.strip()
         self._max_requests_per_run = max_requests_per_run
 
     async def run(
@@ -101,18 +114,40 @@ class JobMatchingWorkflow:
                 )
             else:
                 matches.append(outcome)
-        self._repository.update_matches(matches)
+        self._repository.update_matches(
+            matches,
+            resume_candidate_threshold=self._resume_candidate_threshold,
+            resume_generation_model=self._resume_generation_model,
+        )
         run = run.record(
             WorkflowStage.SCORE,
             WorkflowStatus.COMPLETED,
             f"Scored {len(matches)} jobs; {len(failures)} failed",
         )
         review_count = sum(match.score >= self._review_threshold for match in matches)
+        resume_candidate_ids = {
+            match.job_id
+            for match in matches
+            if match.score > self._resume_candidate_threshold
+        }
+        resume_candidates = tuple(
+            job for job in jobs if job.job_id in resume_candidate_ids
+        )
         await self._notifications.notify(
             "job_review_required",
             f"{review_count} jobs meet the review threshold",
             metadata={"run_id": run.run_id},
         )
+        if resume_candidates:
+            await self._notifications.notify(
+                "resume_generation_candidate",
+                f"{len(resume_candidates)} jobs qualify for resume generation",
+                metadata={
+                    "run_id": run.run_id,
+                    "model": self._resume_generation_model,
+                    "threshold": str(self._resume_candidate_threshold),
+                },
+            )
         run = run.record(
             WorkflowStage.REVIEW,
             WorkflowStatus.REVIEW_REQUIRED,
@@ -128,5 +163,6 @@ class JobMatchingWorkflow:
             run=run,
             jobs=matched_jobs,
             matches=tuple(matches),
+            resume_candidates=resume_candidates,
             failures=tuple(failures),
         )

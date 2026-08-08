@@ -64,7 +64,12 @@ class JobProspectRepositoryTests(unittest.TestCase):
             frozenset({job.job_id}),
         )
 
-        expected = JobProspect.from_job(updated_job, match=0.875)
+        expected = JobProspect.from_job(
+            updated_job,
+            match=0.875,
+            resume_generation_candidate=True,
+            resume_generation_model="gpt-5.4",
+        )
         updated = self.repository.get(job.job_id)
         self.assertEqual(
             replace(updated, created_at=None, updated_at=None),
@@ -73,6 +78,10 @@ class JobProspectRepositoryTests(unittest.TestCase):
         self.assertEqual(updated.created_at, created.created_at)
         self.assertGreaterEqual(updated.updated_at, created.updated_at)
         self.assertEqual(self.repository.list_ranked(), (updated,))
+        self.assertEqual(
+            self.repository.list_resume_generation_candidates(),
+            (updated,),
+        )
 
         rescored = replace(expected, match=0.9)
         self.repository.save(rescored)
@@ -84,6 +93,46 @@ class JobProspectRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(final.created_at, created.created_at)
         self.assertGreaterEqual(final.updated_at, updated.updated_at)
+
+    def test_match_must_exceed_threshold_to_become_resume_candidate(self) -> None:
+        jobs = tuple(
+            JobPosting(
+                source="sample",
+                external_id=f"job-{index}",
+                title=f"Data Engineer {index}",
+                company="Example",
+                url=f"https://example.com/jobs/{index}",
+            )
+            for index in range(2)
+        )
+        self.repository.save_jobs(jobs)
+        matches = tuple(
+            MatchResult(
+                candidate_id="candidate-1",
+                job_id=job.job_id,
+                score=score,
+                breakdown=MatchBreakdown(
+                    skills=score,
+                    title=score,
+                    location=score,
+                    experience=score,
+                ),
+            )
+            for job, score in zip(jobs, (0.85, 0.86))
+        )
+
+        self.repository.update_matches(matches)
+
+        threshold_match = self.repository.get(jobs[0].job_id)
+        qualifying_match = self.repository.get(jobs[1].job_id)
+        self.assertFalse(threshold_match.resume_generation_candidate)
+        self.assertIsNone(threshold_match.resume_generation_model)
+        self.assertTrue(qualifying_match.resume_generation_candidate)
+        self.assertEqual(qualifying_match.resume_generation_model, "gpt-5.4")
+        self.assertEqual(
+            self.repository.list_resume_generation_candidates(),
+            (qualifying_match,),
+        )
 
     def test_serializes_database_timestamps(self) -> None:
         prospect = JobProspect(

@@ -198,6 +198,8 @@ def build_container(
             parser_agent=parser_agent,
             matching_agent=matching_agent,
             notifications=notifications,
+            resume_candidate_threshold=settings.resume_candidate_threshold,
+            resume_generation_model=settings.resume_generation_model,
             max_requests_per_run=settings.matching_max_requests_per_run,
         ),
     )
@@ -563,6 +565,7 @@ async def _run_prospect_matching(
     )
     print(
         f"Matched {len(result.matches)} stored prospects; "
+        f"{len(result.resume_candidates)} resume candidates; "
         f"{len(result.failures)} failed."
     )
     print(_format_job_grid(ranked))

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from models import (
+    DEFAULT_RESUME_CANDIDATE_THRESHOLD,
+    DEFAULT_RESUME_GENERATION_MODEL,
+)
 from utils.dates import to_utc_naive, utc_now
 
 from .connection import Database, MySQLCursor
 
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 SCHEMA_STATEMENTS = (
     """
@@ -36,11 +40,16 @@ SCHEMA_STATEMENTS = (
         source VARCHAR(64) NOT NULL,
         url VARCHAR(2048) NOT NULL,
         job_data JSON NULL,
+        resume_generation_candidate BOOLEAN NOT NULL DEFAULT FALSE,
+        resume_generation_model VARCHAR(64) NULL,
         created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
         updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
             ON UPDATE CURRENT_TIMESTAMP(6),
         PRIMARY KEY (job_id),
         KEY idx_job_prospects_match (`match`),
+        KEY idx_job_prospects_resume_candidate (
+            resume_generation_candidate, `match`
+        ),
         CONSTRAINT ck_job_prospects_match
             CHECK (`match` IS NULL OR (`match` >= 0 AND `match` <= 1))
     ) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci
@@ -110,6 +119,8 @@ def initialize_schema(database: Database) -> None:
             _add_job_prospect_payload(database, cursor)
         if current_version < 8:
             _add_company_prospect_job_search_timestamp(database, cursor)
+        if current_version < 9:
+            _add_job_prospect_resume_generation(database, cursor)
         cursor.execute(
             """
             INSERT IGNORE INTO schema_migrations(version, applied_at)
@@ -213,3 +224,59 @@ def _add_company_prospect_job_search_timestamp(
             ADD KEY idx_company_prospects_job_search (last_job_search_at)
             """
         )
+
+
+def _add_job_prospect_resume_generation(
+    database: Database,
+    cursor: MySQLCursor,
+) -> None:
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME AS app_column_name
+        FROM information_schema.columns
+        WHERE table_schema = %s
+          AND table_name = 'job_prospects'
+          AND column_name IN (
+              'resume_generation_candidate',
+              'resume_generation_model'
+          )
+        """,
+        (database.config.database,),
+    )
+    existing = {str(row["app_column_name"]) for row in cursor.fetchall()}
+    additions: list[str] = []
+    if "resume_generation_candidate" not in existing:
+        additions.extend(
+            (
+                "ADD COLUMN resume_generation_candidate BOOLEAN NOT NULL "
+                "DEFAULT FALSE",
+                "ADD KEY idx_job_prospects_resume_candidate "
+                "(resume_generation_candidate, `match`)",
+            )
+        )
+    if "resume_generation_model" not in existing:
+        additions.append("ADD COLUMN resume_generation_model VARCHAR(64) NULL")
+    if additions:
+        cursor.execute("ALTER TABLE job_prospects " + ", ".join(additions))
+    cursor.execute(
+        """
+        UPDATE job_prospects
+        SET resume_generation_candidate = TRUE,
+            resume_generation_model = %s
+        WHERE `match` > %s
+          AND resume_generation_candidate = FALSE
+        """,
+        (
+            DEFAULT_RESUME_GENERATION_MODEL,
+            DEFAULT_RESUME_CANDIDATE_THRESHOLD,
+        ),
+    )
+    cursor.execute(
+        """
+        UPDATE job_prospects
+        SET resume_generation_model = %s
+        WHERE resume_generation_candidate = TRUE
+          AND resume_generation_model IS NULL
+        """,
+        (DEFAULT_RESUME_GENERATION_MODEL,),
+    )

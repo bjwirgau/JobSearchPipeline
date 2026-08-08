@@ -82,6 +82,8 @@ class CountryEligibilityTests(unittest.TestCase):
                 "JOB_AGENT_GEMINI_TIMEOUT_SECONDS": "45",
                 "JOB_AGENT_MATCHING_CONCURRENCY": "3",
                 "JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN": "10",
+                "JOB_AGENT_RESUME_CANDIDATE_THRESHOLD": "0.9",
+                "JOB_AGENT_RESUME_GENERATION_MODEL": "gpt-5.4",
             }
         )
 
@@ -89,11 +91,17 @@ class CountryEligibilityTests(unittest.TestCase):
         self.assertEqual(settings.gemini_timeout_seconds, 45)
         self.assertEqual(settings.matching_concurrency, 3)
         self.assertEqual(settings.matching_max_requests_per_run, 10)
+        self.assertEqual(settings.resume_candidate_threshold, 0.9)
+        self.assertEqual(settings.resume_generation_model, "gpt-5.4")
         self.assertNotIn("secret", repr(settings))
         with self.assertRaisesRegex(ValueError, "MATCHING_CONCURRENCY"):
             Settings.from_env({"JOB_AGENT_MATCHING_CONCURRENCY": "21"})
         with self.assertRaisesRegex(ValueError, "MATCHING_MAX_REQUESTS_PER_RUN"):
             Settings.from_env({"JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN": "16"})
+        with self.assertRaisesRegex(ValueError, "RESUME_CANDIDATE_THRESHOLD"):
+            Settings.from_env({"JOB_AGENT_RESUME_CANDIDATE_THRESHOLD": "1"})
+        with self.assertRaisesRegex(ValueError, "RESUME_GENERATION_MODEL"):
+            Settings.from_env({"JOB_AGENT_RESUME_GENERATION_MODEL": ""})
 
     def test_greenhouse_board_limit_is_validated(self) -> None:
         settings = Settings.from_env({"JOB_AGENT_GREENHOUSE_BOARD_LIMIT": "10"})

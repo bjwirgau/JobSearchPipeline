@@ -53,11 +53,16 @@ class DatabaseTests(unittest.TestCase):
         self.assertFalse(self.server.resume_candidate_foreign_key)
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {2, 8},
+            {2, 9},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)
         self.assertIn("job_data", self.server.job_prospect_columns)
+        self.assertIn(
+            "resume_generation_candidate",
+            self.server.job_prospect_columns,
+        )
+        self.assertIn("resume_generation_model", self.server.job_prospect_columns)
         self.assertIn("last_job_search_at", self.server.company_prospect_columns)
 
     def test_version_three_schema_adds_job_prospect_timestamps(self) -> None:
@@ -96,7 +101,7 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {3, 8},
+            {3, 9},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)
@@ -105,6 +110,79 @@ class DatabaseTests(unittest.TestCase):
         self.assertIsNotNone(migrated["created_at"])
         self.assertIsNotNone(migrated["updated_at"])
         self.assertIsNone(migrated["job_data"])
+        self.assertFalse(migrated["resume_generation_candidate"])
+        self.assertIsNone(migrated["resume_generation_model"])
+
+    def test_version_eight_schema_backfills_resume_candidates(self) -> None:
+        self.server.tables = {
+            "schema_migrations": {
+                8: {"version": 8, "applied_at": None},
+            },
+            "resume_knowledge": {},
+            "job_prospects": {
+                "qualifying": {
+                    "job_id": "qualifying",
+                    "match": 0.86,
+                    "title": "Data Engineer",
+                    "company": "Example",
+                    "location": "Remote",
+                    "salary": "Not provided",
+                    "source": "fixture",
+                    "url": "https://example.com/jobs/1",
+                    "job_data": None,
+                    "created_at": None,
+                    "updated_at": None,
+                },
+                "threshold": {
+                    "job_id": "threshold",
+                    "match": 0.85,
+                    "title": "Software Engineer",
+                    "company": "Example",
+                    "location": "Remote",
+                    "salary": "Not provided",
+                    "source": "fixture",
+                    "url": "https://example.com/jobs/2",
+                    "job_data": None,
+                    "created_at": None,
+                    "updated_at": None,
+                },
+            },
+            "company_prospects": {},
+            "crawl_pages": {},
+            "workflow_runs": {},
+        }
+        self.server.job_prospect_columns = {
+            "job_id",
+            "match",
+            "title",
+            "company",
+            "location",
+            "salary",
+            "source",
+            "url",
+            "job_data",
+            "created_at",
+            "updated_at",
+        }
+        self.server.company_prospect_columns = {
+            "company_id",
+            "company_name",
+            "board_token",
+            "company_url",
+            "last_job_search_at",
+            "created_at",
+            "updated_at",
+        }
+        self.server.resume_candidate_foreign_key = False
+
+        initialize_schema(self.database)
+
+        qualifying = self.server.tables["job_prospects"]["qualifying"]
+        threshold = self.server.tables["job_prospects"]["threshold"]
+        self.assertTrue(qualifying["resume_generation_candidate"])
+        self.assertEqual(qualifying["resume_generation_model"], "gpt-5.4")
+        self.assertFalse(threshold["resume_generation_candidate"])
+        self.assertIsNone(threshold["resume_generation_model"])
 
     def test_failed_transaction_rolls_back_and_closes(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "stop transaction"):
