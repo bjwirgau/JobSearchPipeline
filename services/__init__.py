@@ -20,12 +20,12 @@ from .job_source_factory import build_job_sources
 from .job_source_service import InMemoryJobSource, JobSourceService
 from .llm_service import (
     DisabledLLMService,
+    GeminiConfig,
+    GeminiLLMService,
     LLMNotConfiguredError,
     LLMResponseError,
     LLMService,
-    MissingOpenAIDependencyError,
-    OpenAIConfig,
-    OpenAILLMService,
+    MissingGeminiDependencyError,
 )
 from .notification_service import LoggingNotificationService, NotificationService
 from .resume_knowledge_service import ResumeKnowledgeError, ResumeKnowledgeService
@@ -44,14 +44,14 @@ __all__ = [
     "JobSourceService",
     "JobNormalizer",
     "DisabledLLMService",
+    "GeminiConfig",
+    "GeminiLLMService",
     "LLMNotConfiguredError",
     "LLMResponseError",
     "LLMService",
     "LoggingNotificationService",
     "NotificationService",
-    "MissingOpenAIDependencyError",
-    "OpenAIConfig",
-    "OpenAILLMService",
+    "MissingGeminiDependencyError",
     "ResumeKnowledgeError",
     "ResumeKnowledgeService",
     "RequestsHttpClient",

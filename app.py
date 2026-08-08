@@ -40,12 +40,12 @@ from repositories import (
 from services import (
     CompanyDiscoveryError,
     DisabledLLMService,
+    GeminiConfig,
+    GeminiLLMService,
     GreenhouseCdxDiscovery,
     GreenhousePublicBoardLookup,
     LoggingNotificationService,
     LLMResponseError,
-    OpenAIConfig,
-    OpenAILLMService,
     RequestsHttpClient,
     ResumeKnowledgeError,
     ResumeKnowledgeService,
@@ -139,15 +139,14 @@ def build_container(settings: Settings | None = None) -> JobAgentContainer:
     )
     parser_agent = ParserAgent()
     llm = (
-        OpenAILLMService(
-            OpenAIConfig(
-                api_key=settings.openai_api_key,
-                model=settings.openai_model,
-                reasoning_effort=settings.openai_reasoning_effort,
-                timeout_seconds=settings.openai_timeout_seconds,
+        GeminiLLMService(
+            GeminiConfig(
+                api_key=settings.gemini_api_key,
+                model=settings.gemini_model,
+                timeout_seconds=settings.gemini_timeout_seconds,
             )
         )
-        if settings.openai_api_key
+        if settings.gemini_api_key
         else DisabledLLMService()
     )
     matching_agent = MatchingAgent(
@@ -169,6 +168,7 @@ def build_container(settings: Settings | None = None) -> JobAgentContainer:
             parser_agent=parser_agent,
             matching_agent=matching_agent,
             notifications=notifications,
+            max_llm_requests_per_run=settings.matching_max_requests_per_run,
         ),
     )
 
@@ -433,9 +433,9 @@ async def _run_search(
     container: JobAgentContainer,
     arguments: argparse.Namespace,
 ) -> int:
-    if not container.settings.openai_api_key:
+    if not container.settings.gemini_api_key:
         logging.getLogger(__name__).error(
-            "Job matching requires OPENAI_API_KEY to be configured"
+            "Job matching requires GEMINI_API_KEY to be configured"
         )
         return 1
     candidate = _load_candidate(container.settings.candidate_profile_path)

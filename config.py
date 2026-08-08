@@ -9,6 +9,7 @@ from typing import Mapping
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+GEMINI_MAX_REQUESTS_PER_RUN = 15
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,11 +103,11 @@ class Settings:
     browser_fallback: str = "none"
     http_timeout_seconds: float = 20.0
     http_user_agent: str = "JobAgent/0.3 (+local-job-search)"
-    openai_api_key: str | None = field(default=None, repr=False)
-    openai_model: str = "gpt-5.6-terra"
-    openai_reasoning_effort: str = "low"
-    openai_timeout_seconds: float = 60.0
-    matching_concurrency: int = 5
+    gemini_api_key: str | None = field(default=None, repr=False)
+    gemini_model: str = "gemini-3.5-flash-lite"
+    gemini_timeout_seconds: float = 60.0
+    matching_concurrency: int = 1
+    matching_max_requests_per_run: int = GEMINI_MAX_REQUESTS_PER_RUN
     matching_prompt_path: Path = PROJECT_ROOT / "prompts" / "score_match.txt"
 
     @classmethod
@@ -193,20 +194,22 @@ class Settings:
                 "JOB_AGENT_HTTP_USER_AGENT",
                 "JobAgent/0.3 (+local-job-search)",
             ),
-            openai_api_key=values.get("OPENAI_API_KEY") or None,
-            openai_model=values.get(
-                "JOB_AGENT_OPENAI_MODEL",
-                "gpt-5.6-terra",
+            gemini_api_key=values.get("GEMINI_API_KEY") or None,
+            gemini_model=values.get(
+                "JOB_AGENT_GEMINI_MODEL",
+                "gemini-3.5-flash-lite",
             ).strip(),
-            openai_reasoning_effort=values.get(
-                "JOB_AGENT_OPENAI_REASONING_EFFORT",
-                "low",
-            ).strip().casefold(),
-            openai_timeout_seconds=float(
-                values.get("JOB_AGENT_OPENAI_TIMEOUT_SECONDS", "60")
+            gemini_timeout_seconds=float(
+                values.get("JOB_AGENT_GEMINI_TIMEOUT_SECONDS", "60")
             ),
             matching_concurrency=int(
-                values.get("JOB_AGENT_MATCHING_CONCURRENCY", "5")
+                values.get("JOB_AGENT_MATCHING_CONCURRENCY", "1")
+            ),
+            matching_max_requests_per_run=int(
+                values.get(
+                    "JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN",
+                    str(GEMINI_MAX_REQUESTS_PER_RUN),
+                )
             ),
             matching_prompt_path=_resolve_path(
                 values.get(
@@ -254,24 +257,19 @@ class Settings:
             raise ValueError(
                 "JOB_AGENT_REMOTE_COUNTRY must be a two-letter country code"
             )
-        if not self.openai_model:
-            raise ValueError("JOB_AGENT_OPENAI_MODEL must not be empty")
-        if self.openai_reasoning_effort not in {
-            "none",
-            "low",
-            "medium",
-            "high",
-            "xhigh",
-            "max",
-        }:
-            raise ValueError("invalid JOB_AGENT_OPENAI_REASONING_EFFORT")
-        if self.openai_timeout_seconds <= 0:
+        if not self.gemini_model:
+            raise ValueError("JOB_AGENT_GEMINI_MODEL must not be empty")
+        if self.gemini_timeout_seconds <= 0:
             raise ValueError(
-                "JOB_AGENT_OPENAI_TIMEOUT_SECONDS must be greater than zero"
+                "JOB_AGENT_GEMINI_TIMEOUT_SECONDS must be greater than zero"
             )
         if not 1 <= self.matching_concurrency <= 20:
             raise ValueError(
                 "JOB_AGENT_MATCHING_CONCURRENCY must be between 1 and 20"
+            )
+        if not 1 <= self.matching_max_requests_per_run <= GEMINI_MAX_REQUESTS_PER_RUN:
+            raise ValueError(
+                "JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN must be between 1 and 15"
             )
         if bool(self.adzuna_app_id) != bool(self.adzuna_app_key):
             raise ValueError(

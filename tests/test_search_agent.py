@@ -154,6 +154,55 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repeated.matches, ())
         self.assertEqual(len(llm.prompts), 1)
 
+    async def test_workflow_caps_gemini_requests_at_fifteen_per_run(self) -> None:
+        jobs = tuple(
+            JobPosting(
+                source="fixture",
+                external_id=f"job-{index}",
+                title="Data Engineer",
+                company=f"Example {index}",
+                url=f"https://example.com/jobs/{index}",
+                location="Remote",
+                skills=("Python",),
+            )
+            for index in range(20)
+        )
+        search_agent = SearchAgent(
+            sources=(InMemoryJobSource("fixture", jobs),),
+            repository=self.repository,
+            enabled=True,
+        )
+        llm = StaticMatchLLM()
+        workflow = JobSearchWorkflow(
+            search_agent=search_agent,
+            parser_agent=ParserAgent(),
+            matching_agent=MatchingAgent(
+                llm=llm,
+                prompt_template=MATCH_PROMPT,
+            ),
+            notifications=LoggingNotificationService(),
+        )
+        candidate = CandidateProfile(
+            candidate_id="candidate-1",
+            full_name="Example Candidate",
+            email="candidate@example.com",
+            skills=("Python",),
+            desired_titles=("Data Engineer",),
+        )
+
+        result = await workflow.run(
+            candidate,
+            SearchCriteria(job_titles=("Data Engineer",), results_per_query=20),
+        )
+
+        self.assertEqual(len(result.jobs), 15)
+        self.assertEqual(len(result.matches), 15)
+        self.assertEqual(len(llm.prompts), 15)
+        self.assertEqual(
+            sum(self.repository.get(job.job_id).match is not None for job in jobs),
+            15,
+        )
+
     async def test_query_builder_preserves_discovery_criteria(self) -> None:
         query = SearchQueryBuilder().build(
             SearchCriteria(

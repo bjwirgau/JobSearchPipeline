@@ -9,8 +9,8 @@ description = "A review-first job search and application pipeline"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+  "google-genai>=2.13,<3",
   "mysql-connector-python>=9.7,<10",
-  "openai>=2.47,<3",
 ]
 
 [project.optional-dependencies]

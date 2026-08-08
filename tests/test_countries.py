@@ -74,24 +74,26 @@ class CountryEligibilityTests(unittest.TestCase):
                 {"JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS": "0"}
             )
 
-    def test_openai_matching_settings_are_validated(self) -> None:
+    def test_gemini_matching_settings_are_validated(self) -> None:
         settings = Settings.from_env(
             {
-                "OPENAI_API_KEY": "secret",
-                "JOB_AGENT_OPENAI_MODEL": "gpt-5.6-terra",
-                "JOB_AGENT_OPENAI_REASONING_EFFORT": "medium",
-                "JOB_AGENT_OPENAI_TIMEOUT_SECONDS": "45",
+                "GEMINI_API_KEY": "secret",
+                "JOB_AGENT_GEMINI_MODEL": "gemini-3.5-flash-lite",
+                "JOB_AGENT_GEMINI_TIMEOUT_SECONDS": "45",
                 "JOB_AGENT_MATCHING_CONCURRENCY": "3",
+                "JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN": "10",
             }
         )
 
-        self.assertEqual(settings.openai_model, "gpt-5.6-terra")
-        self.assertEqual(settings.openai_reasoning_effort, "medium")
-        self.assertEqual(settings.openai_timeout_seconds, 45)
+        self.assertEqual(settings.gemini_model, "gemini-3.5-flash-lite")
+        self.assertEqual(settings.gemini_timeout_seconds, 45)
         self.assertEqual(settings.matching_concurrency, 3)
+        self.assertEqual(settings.matching_max_requests_per_run, 10)
         self.assertNotIn("secret", repr(settings))
         with self.assertRaisesRegex(ValueError, "MATCHING_CONCURRENCY"):
             Settings.from_env({"JOB_AGENT_MATCHING_CONCURRENCY": "21"})
+        with self.assertRaisesRegex(ValueError, "MATCHING_MAX_REQUESTS_PER_RUN"):
+            Settings.from_env({"JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN": "16"})
 
 
 if __name__ == "__main__":

@@ -118,12 +118,12 @@ prospects.
 
 ### LLM matching
 
-Each distinct normalized job is matched through the OpenAI Responses API after
+Each distinct normalized job is matched through the Gemini Developer API after
 parsing. The model receives job evidence plus the candidate's summary,
 preferences, and structured resume knowledge. The prompt deliberately omits the
 candidate's name, email address, resume path, and source job payload. Requests
-use strict structured output and `store=false`; the application validates every
-score before persisting it.
+use schema-constrained JSON output, and the application validates every score
+before persisting it.
 
 The response contains a holistic score, separate skills/title/location/
 experience/industry scores, matched qualifications, missing qualifications, and
@@ -134,21 +134,31 @@ inconsistent and should not be treated as proof of eligibility.
 Configure matching in `.env`:
 
 ```env
-OPENAI_API_KEY=your-api-key
-JOB_AGENT_OPENAI_MODEL=gpt-5.6-terra
-JOB_AGENT_OPENAI_REASONING_EFFORT=low
-JOB_AGENT_OPENAI_TIMEOUT_SECONDS=60
-JOB_AGENT_MATCHING_CONCURRENCY=5
+GEMINI_API_KEY=your-api-key
+JOB_AGENT_GEMINI_MODEL=gemini-3.5-flash-lite
+JOB_AGENT_GEMINI_TIMEOUT_SECONDS=60
+JOB_AGENT_MATCHING_CONCURRENCY=1
+JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN=15
 JOB_AGENT_MATCHING_PROMPT=prompts/score_match.txt
 ```
 
-`gpt-5.6-terra` is the default balance of quality and cost. The model remains
-configurable without a code change. One API request is made for every distinct
-job being scored, so result count and concurrency directly affect API usage,
-cost, and latency. The search command stops before source requests when
-`OPENAI_API_KEY` is missing. See the official OpenAI documentation for the
-[Responses API](https://developers.openai.com/api/docs/guides/text) and
-[structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
+`gemini-3.5-flash-lite` is the default because it is optimized for high-volume
+structured JSON and document extraction. The model remains configurable without
+a code change. One API request is made for every distinct job being scored, so
+result count and concurrency directly affect quota usage and latency. Matching
+defaults to one request at a time to avoid free-tier request bursts. Every
+workflow run is also hard-capped at 15 Gemini requests; the per-run setting can
+be lowered but values above 15 are rejected. Jobs beyond the cap remain stored
+without a match score and are eligible for a later `--unmatched-only` run. The
+search command stops before source requests when `GEMINI_API_KEY` is missing.
+Create a key in [Google AI Studio](https://aistudio.google.com/apikey), and see
+Google's [structured output documentation](https://ai.google.dev/gemini-api/docs/structured-output).
+
+The unpaid Gemini API tier may use submitted content to improve Google products
+and may involve human review. Do not send sensitive or personally identifying
+resume data through the unpaid tier; review the
+[Gemini API terms](https://ai.google.dev/gemini-api/terms) before enabling the
+scheduled search.
 
 ### Enable and Configure Job Searching
 
@@ -303,7 +313,7 @@ Before enabling it, configure these values in the project's `.env`:
 
 ```env
 JOB_AGENT_SEARCH_ENABLED=true
-OPENAI_API_KEY=your-api-key
+GEMINI_API_KEY=your-api-key
 ```
 
 Install both project schedules for the current user from the project root. The

@@ -20,6 +20,9 @@ from models import (
 from services import NotificationService
 
 
+GEMINI_MAX_REQUESTS_PER_RUN = 15
+
+
 @dataclass(frozen=True, slots=True)
 class JobSearchWorkflowResult:
     run: WorkflowRun
@@ -37,14 +40,18 @@ class JobSearchWorkflow:
         matching_agent: MatchingAgent,
         notifications: NotificationService,
         review_threshold: float = 0.7,
+        max_llm_requests_per_run: int = GEMINI_MAX_REQUESTS_PER_RUN,
     ) -> None:
         if not 0 <= review_threshold <= 1:
             raise ValueError("review_threshold must be between 0 and 1")
+        if not 1 <= max_llm_requests_per_run <= GEMINI_MAX_REQUESTS_PER_RUN:
+            raise ValueError("max_llm_requests_per_run must be between 1 and 15")
         self._search = search_agent
         self._parser = parser_agent
         self._matching = matching_agent
         self._notifications = notifications
         self._review_threshold = review_threshold
+        self._max_llm_requests_per_run = max_llm_requests_per_run
 
     def selected_source_names(
         self,
@@ -83,11 +90,13 @@ class JobSearchWorkflow:
             WorkflowStatus.COMPLETED,
             f"Parsed {len(parsed_jobs)} jobs",
         )
-        jobs_to_score = (
+        pending_jobs = (
             parsed_jobs
             if score_existing
             else self._search.unmatched_jobs(parsed_jobs)
         )
+        jobs_to_score = pending_jobs[: self._max_llm_requests_per_run]
+        deferred_count = len(pending_jobs) - len(jobs_to_score)
         matches = tuple(
             await asyncio.gather(
                 *(
@@ -100,7 +109,11 @@ class JobSearchWorkflow:
         run = run.record(
             WorkflowStage.SCORE,
             WorkflowStatus.COMPLETED,
-            f"Scored {len(matches)} jobs",
+            (
+                f"Scored {len(matches)} jobs; deferred {deferred_count} to a later run"
+                if deferred_count
+                else f"Scored {len(matches)} jobs"
+            ),
         )
         review_count = sum(match.score >= self._review_threshold for match in matches)
         await self._notifications.notify(
