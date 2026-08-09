@@ -117,9 +117,15 @@ class MatchingAgent:
                 "years": dict(resume_knowledge.years),
                 "industries": list(resume_knowledge.industries),
                 "roles": [role.to_dict() for role in resume_knowledge.roles],
-                "achievements": list(resume_knowledge.achievements),
-                "certifications": list(resume_knowledge.certifications),
-                "education": list(resume_knowledge.education),
+                "achievements": [
+                    value.to_dict() for value in resume_knowledge.achievements
+                ],
+                "certifications": [
+                    value.to_dict() for value in resume_knowledge.certifications
+                ],
+                "education": [
+                    value.to_dict() for value in resume_knowledge.education
+                ],
             }
         job_evidence = {
             "title": job.title,

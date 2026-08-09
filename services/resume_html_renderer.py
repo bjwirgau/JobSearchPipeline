@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from html import escape
 
-from models import CandidateProfile, GeneratedResumeContent, GeneratedResumeRole
+from models import (
+    CandidateProfile,
+    GeneratedResumeContent,
+    GeneratedResumeRole,
+    ResumeAchievement,
+    ResumeCertification,
+    ResumeEducation,
+)
 
 
 RESUME_CSS = """
@@ -127,6 +134,8 @@ h3 {
   font-weight: 600;
 }
 
+.company-location { font-weight: 400; }
+
 .dates {
   color: var(--muted);
   font-size: 9.25pt;
@@ -146,6 +155,17 @@ h3 {
 }
 
 .compact-list li + li { margin-top: 3px; }
+
+.credential { break-inside: avoid; }
+.credential + .credential { margin-top: 10px; }
+
+.credential-meta {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9.25pt;
+}
+
+.highlight-category { color: var(--accent); }
 
 @page { size: Letter; margin: 0.5in 0.58in; }
 
@@ -196,18 +216,18 @@ class ResumeHTMLRenderer:
             sections.append(
                 self._section(
                     "Career Highlights",
-                    self._list(content.career_highlights),
+                    self._highlights(content.career_highlights),
                 )
             )
         if content.education:
             sections.append(
-                self._section("Education", self._list(content.education))
+                self._section("Education", self._education(content.education))
             )
         if content.certifications:
             sections.append(
                 self._section(
                     "Certifications",
-                    self._list(content.certifications),
+                    self._certifications(content.certifications),
                 )
             )
 
@@ -248,20 +268,79 @@ class ResumeHTMLRenderer:
         return f'<section><h2>{escape(title)}</h2>{body}</section>'
 
     @staticmethod
-    def _list(values: tuple[str, ...]) -> str:
-        items = "".join(f"<li>{escape(value)}</li>" for value in values)
-        return f'<ul class="compact-list">{items}</ul>'
+    def _highlights(values: tuple[ResumeAchievement, ...]) -> str:
+        items: list[str] = []
+        for value in values:
+            category = (
+                f'<strong class="highlight-category">{escape(value.category)}:</strong> '
+                if value.category
+                else ""
+            )
+            items.append(f"<li>{category}{escape(value.description)}</li>")
+        return f'<ul class="compact-list">{"".join(items)}</ul>'
+
+    @staticmethod
+    def _education(values: tuple[ResumeEducation, ...]) -> str:
+        entries: list[str] = []
+        for value in values:
+            qualification = " in ".join(
+                part for part in (value.degree, value.field) if part
+            )
+            heading = qualification or value.institution
+            organization = (
+                f'<p class="company">{escape(value.institution)}</p>'
+                if qualification
+                else ""
+            )
+            metadata = " • ".join(
+                escape(part)
+                for part in (value.location, value.status)
+                if part
+            )
+            entries.append(
+                '<article class="credential">'
+                f"<h3>{escape(heading)}</h3>"
+                f"{organization}"
+                + (f'<p class="credential-meta">{metadata}</p>' if metadata else "")
+                + "</article>"
+            )
+        return "".join(entries)
+
+    @staticmethod
+    def _certifications(values: tuple[ResumeCertification, ...]) -> str:
+        entries: list[str] = []
+        for value in values:
+            metadata = " • ".join(
+                escape(part)
+                for part in (
+                    f"Issued {value.issued}" if value.issued else None,
+                    value.status,
+                )
+                if part
+            )
+            entries.append(
+                '<article class="credential">'
+                f"<h3>{escape(value.name)}</h3>"
+                + (f'<p class="credential-meta">{metadata}</p>' if metadata else "")
+                + "</article>"
+            )
+        return "".join(entries)
 
     def _role(self, role: GeneratedResumeRole) -> str:
         dates = self._dates(role)
-        achievements = (
+        responsibilities = (
             f'<ul class="details">'
             + "".join(
-                f"<li>{escape(achievement)}</li>"
-                for achievement in role.achievements
+                f"<li>{escape(responsibility)}</li>"
+                for responsibility in role.responsibilities
             )
             + "</ul>"
-            if role.achievements
+            if role.responsibilities
+            else ""
+        )
+        location = (
+            f' <span class="company-location">• {escape(role.location)}</span>'
+            if role.location
             else ""
         )
         return (
@@ -269,11 +348,11 @@ class ResumeHTMLRenderer:
             '<div class="role-heading">'
             "<div>"
             f"<h3>{escape(role.title)}</h3>"
-            f'<p class="company">{escape(role.company)}</p>'
+            f'<p class="company">{escape(role.company)}{location}</p>'
             "</div>"
             + (f'<p class="dates">{escape(dates)}</p>' if dates else "")
             + "</div>"
-            + achievements
+            + responsibilities
             + "</article>"
         )
 

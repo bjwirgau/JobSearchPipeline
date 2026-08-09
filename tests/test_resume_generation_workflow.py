@@ -16,7 +16,6 @@ from models import (
     MatchBreakdown,
     MatchResult,
     ResumeKnowledgeBase,
-    ResumeRole,
 )
 from repositories import JobProspectRepository
 from services import DocumentService
@@ -52,14 +51,34 @@ class StaticResumeGenerator:
                 {
                     "company": "Example Corp",
                     "title": "Data Engineer",
-                    "start_date": None,
-                    "end_date": None,
-                    "achievements": ["Built a supported pipeline."],
+                    "location": "Remote, US",
+                    "start_date": "2022-01",
+                    "end_date": "Present",
+                    "responsibilities": ["Built a supported pipeline."],
                 }
             ],
-            "career_highlights": [],
-            "education": [],
-            "certifications": [],
+            "career_highlights": [
+                {
+                    "category": "Reliability",
+                    "description": "Improved platform reliability.",
+                }
+            ],
+            "education": [
+                {
+                    "institution": "Example University",
+                    "location": "Denver, CO",
+                    "degree": "Bachelor of Science",
+                    "field": "Computer Engineering",
+                    "status": None,
+                }
+            ],
+            "certifications": [
+                {
+                    "name": "Cloud Certification",
+                    "issued": "2025-01",
+                    "status": "Current",
+                }
+            ],
         }
 
 
@@ -80,17 +99,43 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             skills=("Python", "SQL"),
             resume_path="/private/source-resume.pdf",
         )
-        self.knowledge = ResumeKnowledgeBase(
-            candidate_id="candidate-1",
-            skills=("Python", "SQL"),
-            roles=(
-                ResumeRole(
-                    company="Example Corp",
-                    title="Data Engineer",
-                    achievements=("Built a supported pipeline.",),
-                    skills=("Python",),
-                ),
-            ),
+        self.knowledge = ResumeKnowledgeBase.from_dict(
+            {
+                "candidate_id": "candidate-1",
+                "skills": ["Python", "SQL"],
+                "roles": [
+                    {
+                        "company": "Example Corp",
+                        "title": "Data Engineer",
+                        "location": "Remote, US",
+                        "start_date": "2022-01",
+                        "end_date": "Present",
+                        "responsibilities": ["Built a supported pipeline."],
+                        "skills": ["Python"],
+                    }
+                ],
+                "achievements": [
+                    {
+                        "category": "Reliability",
+                        "description": "Improved platform reliability.",
+                    }
+                ],
+                "education": [
+                    {
+                        "institution": "Example University",
+                        "location": "Denver, CO",
+                        "degree": "Bachelor of Science",
+                        "field": "Computer Engineering",
+                    }
+                ],
+                "certifications": [
+                    {
+                        "name": "Cloud Certification",
+                        "issued": "2025-01",
+                        "status": "Current",
+                    }
+                ],
+            }
         )
         self.job = JobPosting(
             source="greenhouse",
@@ -166,7 +211,11 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Example Candidate", html)
             self.assertIn("candidate@example.com", html)
             self.assertIn("Professional Experience", html)
+            self.assertIn("Remote, US", html)
             self.assertIn("Built a supported pipeline.", html)
+            self.assertIn("Improved platform reliability.", html)
+            self.assertIn("Bachelor of Science in Computer Engineering", html)
+            self.assertIn("Cloud Certification", html)
 
     async def test_rejects_job_that_is_not_marked_for_generation(self) -> None:
         self.repository.save_jobs((self.job,))

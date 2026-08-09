@@ -20,34 +20,199 @@ def _unique_strings(values: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(unique.values())
 
 
+def _required_string(value: object, field: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{field} must be a string")
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f"{field} must not be empty")
+    return cleaned
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError("optional resume fields must be strings or null")
+    cleaned = value.strip()
+    return cleaned or None
+
+
+@dataclass(frozen=True, slots=True)
+class ResumeAchievement:
+    """A categorized, factual accomplishment from the candidate profile."""
+
+    description: str
+    category: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "description",
+            _required_string(self.description, "resume achievement description"),
+        )
+        object.__setattr__(self, "category", _optional_string(self.category))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "category": self.category,
+            "description": self.description,
+        }
+
+    @classmethod
+    def from_value(cls, value: object) -> "ResumeAchievement":
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, str):
+            return cls(description=value)
+        if not isinstance(value, Mapping):
+            raise TypeError("resume achievements must be strings or objects")
+        return cls(
+            category=_optional_string(value.get("category")),
+            description=_required_string(
+                value.get("description"),
+                "resume achievement description",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ResumeCertification:
+    """A certification represented by the fields in the candidate JSON."""
+
+    name: str
+    issued: str | None = None
+    status: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "name",
+            _required_string(self.name, "resume certification name"),
+        )
+        object.__setattr__(self, "issued", _optional_string(self.issued))
+        object.__setattr__(self, "status", _optional_string(self.status))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "issued": self.issued,
+            "status": self.status,
+        }
+
+    @classmethod
+    def from_value(cls, value: object) -> "ResumeCertification":
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, str):
+            return cls(name=value)
+        if not isinstance(value, Mapping):
+            raise TypeError("resume certifications must be strings or objects")
+        return cls(
+            name=_required_string(value.get("name"), "resume certification name"),
+            issued=_optional_string(value.get("issued")),
+            status=_optional_string(value.get("status")),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ResumeEducation:
+    """An education record represented by the fields in the candidate JSON."""
+
+    institution: str
+    location: str | None = None
+    degree: str | None = None
+    field: str | None = None
+    status: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "institution",
+            _required_string(self.institution, "resume education institution"),
+        )
+        for field_name in ("location", "degree", "field", "status"):
+            object.__setattr__(
+                self,
+                field_name,
+                _optional_string(getattr(self, field_name)),
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "institution": self.institution,
+            "location": self.location,
+            "degree": self.degree,
+            "field": self.field,
+            "status": self.status,
+        }
+
+    @classmethod
+    def from_value(cls, value: object) -> "ResumeEducation":
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, str):
+            return cls(institution=value)
+        if not isinstance(value, Mapping):
+            raise TypeError("resume education entries must be strings or objects")
+        return cls(
+            institution=_required_string(
+                value.get("institution"),
+                "resume education institution",
+            ),
+            location=_optional_string(value.get("location")),
+            degree=_optional_string(value.get("degree")),
+            field=_optional_string(value.get("field")),
+            status=_optional_string(value.get("status")),
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class ResumeRole:
     """Evidence from one role represented in the source resume."""
 
     company: str
     title: str
+    location: str | None = None
     start_date: str | None = None
     end_date: str | None = None
+    responsibilities: tuple[str, ...] = ()
     achievements: tuple[str, ...] = ()
     skills: tuple[str, ...] = ()
     industries: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for field_name in ("company", "title"):
-            value = getattr(self, field_name).strip()
-            if not value:
-                raise ValueError(f"resume role {field_name} must not be empty")
+            value = _required_string(
+                getattr(self, field_name),
+                f"resume role {field_name}",
+            )
             object.__setattr__(self, field_name, value)
-        for field_name in ("achievements", "skills", "industries"):
+        for field_name in (
+            "responsibilities",
+            "achievements",
+            "skills",
+            "industries",
+        ):
             object.__setattr__(self, field_name, _unique_strings(getattr(self, field_name)))
+        object.__setattr__(self, "location", _optional_string(self.location))
+        object.__setattr__(self, "start_date", _optional_string(self.start_date))
+        object.__setattr__(self, "end_date", _optional_string(self.end_date))
+
+    @property
+    def evidence(self) -> tuple[str, ...]:
+        """Return current responsibilities plus legacy role achievements."""
+
+        return _unique_strings(self.responsibilities + self.achievements)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "company": self.company,
             "title": self.title,
+            "location": self.location,
             "start_date": self.start_date,
             "end_date": self.end_date,
-            "achievements": list(self.achievements),
+            "responsibilities": list(self.evidence),
             "skills": list(self.skills),
             "industries": list(self.industries),
         }
@@ -55,10 +220,12 @@ class ResumeRole:
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "ResumeRole":
         return cls(
-            company=str(value["company"]),
-            title=str(value["title"]),
+            company=_required_string(value.get("company"), "resume role company"),
+            title=_required_string(value.get("title"), "resume role title"),
+            location=_optional_string(value.get("location")),
             start_date=value.get("start_date"),
             end_date=value.get("end_date"),
+            responsibilities=tuple(value.get("responsibilities", ())),
             achievements=tuple(value.get("achievements", ())),
             skills=tuple(value.get("skills", ())),
             industries=tuple(value.get("industries", ())),
@@ -74,9 +241,9 @@ class ResumeKnowledgeBase:
     years: Mapping[str, float] = field(default_factory=dict)
     industries: tuple[str, ...] = ()
     roles: tuple[ResumeRole, ...] = ()
-    achievements: tuple[str, ...] = ()
-    certifications: tuple[str, ...] = ()
-    education: tuple[str, ...] = ()
+    achievements: tuple[ResumeAchievement, ...] = ()
+    certifications: tuple[ResumeCertification, ...] = ()
+    education: tuple[ResumeEducation, ...] = ()
     schema_version: int = 1
     updated_at: datetime = field(default_factory=utc_now)
 
@@ -88,15 +255,24 @@ class ResumeKnowledgeBase:
             raise ValueError("schema_version must be greater than zero")
         object.__setattr__(self, "candidate_id", candidate_id)
 
-        for field_name in (
-            "skills",
-            "industries",
-            "achievements",
-            "certifications",
-            "education",
-        ):
+        for field_name in ("skills", "industries"):
             object.__setattr__(self, field_name, _unique_strings(getattr(self, field_name)))
         object.__setattr__(self, "roles", tuple(self.roles))
+        object.__setattr__(
+            self,
+            "achievements",
+            tuple(ResumeAchievement.from_value(value) for value in self.achievements),
+        )
+        object.__setattr__(
+            self,
+            "certifications",
+            tuple(ResumeCertification.from_value(value) for value in self.certifications),
+        )
+        object.__setattr__(
+            self,
+            "education",
+            tuple(ResumeEducation.from_value(value) for value in self.education),
+        )
 
         normalized_years: dict[str, float] = {}
         display_names: dict[str, str] = {}
@@ -139,9 +315,9 @@ class ResumeKnowledgeBase:
             "years": dict(self.years),
             "industries": list(self.industries),
             "roles": [role.to_dict() for role in self.roles],
-            "achievements": list(self.achievements),
-            "certifications": list(self.certifications),
-            "education": list(self.education),
+            "achievements": [value.to_dict() for value in self.achievements],
+            "certifications": [value.to_dict() for value in self.certifications],
+            "education": [value.to_dict() for value in self.education],
             "updated_at": to_iso(self.updated_at),
         }
 

@@ -48,11 +48,40 @@ The resume knowledge base turns resume facts into validated JSON that matching c
     "React": 4,
     "Java": 2
   },
-  "industries": ["Ecommerce", "Retail"]
+  "industries": ["Ecommerce", "Retail"],
+  "roles": [
+    {
+      "company": "Example Company",
+      "title": "Senior Software Engineer",
+      "location": "Remote, US",
+      "start_date": "2022-03",
+      "end_date": "Present",
+      "responsibilities": ["Built and supported scalable applications."]
+    }
+  ],
+  "achievements": [
+    {"category": "Performance", "description": "Improved application performance."}
+  ],
+  "certifications": [
+    {"name": "Example Certification", "issued": "2025-01", "status": "Current"}
+  ],
+  "education": [
+    {
+      "institution": "Example University",
+      "location": "Denver, CO",
+      "degree": "Bachelor of Science",
+      "field": "Computer Engineering",
+      "status": null
+    }
+  ]
 }
 ```
 
-`ResumeKnowledgeBase` validates skill names and experience ranges while retaining optional roles, achievements, certifications, and education as factual evidence. A skill present only in `years` remains available to matching through the combined `all_skills` view.
+`ResumeKnowledgeBase` validates skill names and experience ranges while preserving
+structured roles, achievements, certifications, and education as factual evidence.
+Older profiles containing strings for achievements, certifications, or education
+remain supported. A skill present only in `years` remains available to matching
+through the combined `all_skills` view.
 
 The knowledge layer includes:
 
@@ -216,10 +245,11 @@ did not pass the configured threshold. It uses the model stored on that job,
 loads the normalized posting plus the reviewed candidate knowledge, and makes
 one OpenAI Responses API request with response storage disabled. GPT returns
 schema-constrained resume content rather than document markup. The application
-validates factual fields against the reviewed candidate knowledge and renders a
-standalone, ATS-friendly HTML resume with embedded professional CSS. Candidate
-contact details are added locally and are not included in the model request. The
-prompt also excludes the raw scraper payload and local source-resume path.
+validates selected responsibilities and structured factual records against the
+reviewed candidate knowledge and renders a standalone, ATS-friendly HTML resume
+with embedded professional CSS. Candidate contact details are added locally and
+are not included in the model request. The prompt also excludes the raw scraper
+payload and local source-resume path.
 
 The generated `.html` file is written to `JOB_AGENT_GENERATED_DOCUMENTS`
 (default: `data/generated_documents`) and is ignored by Git. Open it in a browser

@@ -30,11 +30,13 @@ class ResumeHTMLRendererTests(unittest.TestCase):
                 ResumeRole(
                     company="Example Corp",
                     title="Data Engineer",
+                    location="Remote, US",
                     start_date="2022",
                     end_date="Present",
-                    achievements=("Built reliable pipelines.",),
+                    responsibilities=("Built reliable pipelines.",),
                 ),
             ),
+            achievements=("Improved platform reliability.",),
             education=("B.S. Computer Engineering",),
             certifications=("Cloud Certification",),
         )
@@ -48,9 +50,10 @@ class ResumeHTMLRendererTests(unittest.TestCase):
                     {
                         "company": "Example Corp",
                         "title": "Data Engineer",
+                        "location": "Remote, US",
                         "start_date": "2022",
                         "end_date": "Present",
-                        "achievements": ["Built reliable pipelines."],
+                        "responsibilities": ["Built reliable pipelines."],
                     }
                 ],
                 "career_highlights": ["Improved platform reliability."],
@@ -71,6 +74,7 @@ class ResumeHTMLRendererTests(unittest.TestCase):
         self.assertIn("@media print", document)
         self.assertIn("Example &lt;Candidate&gt;", document)
         self.assertIn("Denver &amp; Remote", document)
+        self.assertIn("Remote, US", document)
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", document)
         self.assertNotIn("<script>", document)
         self.assertNotIn("src=", document)
@@ -115,6 +119,31 @@ class ResumeHTMLRendererTests(unittest.TestCase):
             "unsupported experience entry",
         ):
             unsupported_role.validate_against(self.knowledge)
+
+        unsupported_responsibility = GeneratedResumeContent.from_dict(
+            {
+                "professional_summary": "Data engineer.",
+                "skills": [],
+                "experience": [
+                    {
+                        "company": "Example Corp",
+                        "title": "Data Engineer",
+                        "location": "Remote, US",
+                        "start_date": "2022",
+                        "end_date": "Present",
+                        "responsibilities": ["Invented an unsupported achievement."],
+                    }
+                ],
+                "career_highlights": [],
+                "education": [],
+                "certifications": [],
+            }
+        )
+        with self.assertRaisesRegex(
+            InvalidGeneratedResumeError,
+            "unsupported responsibilities",
+        ):
+            unsupported_responsibility.validate_against(self.knowledge)
 
 
 if __name__ == "__main__":

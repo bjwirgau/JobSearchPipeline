@@ -82,9 +82,11 @@ class ResumeGenerationAgent:
             "years": dict(knowledge.years),
             "industries": list(knowledge.industries),
             "roles": [role.to_dict() for role in knowledge.roles],
-            "achievements": list(knowledge.achievements),
-            "certifications": list(knowledge.certifications),
-            "education": list(knowledge.education),
+            "achievements": [value.to_dict() for value in knowledge.achievements],
+            "certifications": [
+                value.to_dict() for value in knowledge.certifications
+            ],
+            "education": [value.to_dict() for value in knowledge.education],
         }
         job_evidence = {
             "title": job.title,

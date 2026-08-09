@@ -59,6 +59,13 @@ class OpenAIResumeGeneratorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response_format["type"], "json_schema")
         self.assertTrue(response_format["strict"])
         self.assertIn("professional_summary", response_format["schema"]["required"])
+        properties = response_format["schema"]["properties"]
+        experience_properties = properties["experience"]["items"]["properties"]
+        self.assertIn("location", experience_properties)
+        self.assertIn("responsibilities", experience_properties)
+        self.assertEqual(properties["career_highlights"]["items"]["type"], "object")
+        self.assertEqual(properties["education"]["items"]["type"], "object")
+        self.assertEqual(properties["certifications"]["items"]["type"], "object")
         self.assertIn("Never invent", request["instructions"])
         self.assertNotIn("secret-key", repr(generator))
 

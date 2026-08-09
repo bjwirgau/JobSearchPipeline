@@ -104,6 +104,22 @@ class ResumeKnowledgeTests(unittest.TestCase):
         self.assertIn("Magento", knowledge.all_skills)
         self.assertEqual(knowledge.years_for("Magento"), 10)
         self.assertIn("Ecommerce", knowledge.industries)
+        self.assertEqual(knowledge.roles[0].location, "El Paso, TX")
+        self.assertIn(
+            "Developed a full-stack e-commerce platform",
+            knowledge.roles[0].responsibilities[0],
+        )
+        self.assertEqual(knowledge.achievements[0].category, "Performance")
+        self.assertIn("Lighthouse", knowledge.achievements[0].description)
+        self.assertEqual(
+            knowledge.certifications[0].name,
+            "Adobe Certified Expert - Adobe Commerce Developer",
+        )
+        self.assertEqual(
+            knowledge.education[0].institution,
+            "University of San Diego",
+        )
+        self.assertEqual(knowledge.education[0].field, "Applied Artificial Intelligence")
 
 
 if __name__ == "__main__":

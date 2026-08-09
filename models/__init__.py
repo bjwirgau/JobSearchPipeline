@@ -28,7 +28,13 @@ from .generated_resume import (
     InvalidGeneratedResumeError,
 )
 from .match import MatchBreakdown, MatchResult
-from .resume import ResumeKnowledgeBase, ResumeRole
+from .resume import (
+    ResumeAchievement,
+    ResumeCertification,
+    ResumeEducation,
+    ResumeKnowledgeBase,
+    ResumeRole,
+)
 from .workflow import StageRecord, WorkflowRun, WorkflowStage, WorkflowStatus
 
 __all__ = [
@@ -51,6 +57,9 @@ __all__ = [
     "JobProspect",
     "MatchBreakdown",
     "MatchResult",
+    "ResumeAchievement",
+    "ResumeCertification",
+    "ResumeEducation",
     "ResumeKnowledgeBase",
     "ResumeRole",
     "SearchCriteria",
