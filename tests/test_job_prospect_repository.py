@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import replace
+from datetime import datetime, timezone
 
 from database import Database, MySQLConfig, initialize_schema
 from models import JobPosting, JobProspect, MatchBreakdown, MatchResult
@@ -31,6 +32,7 @@ class JobProspectRepositoryTests(unittest.TestCase):
             salary_min=140000,
             salary_max=180000,
             salary_currency="USD",
+            posted_at=datetime(2026, 8, 1, 12, tzinfo=timezone.utc),
         )
         self.assertEqual(self.repository.save_jobs((job,)), 1)
         self.assertEqual(self.repository.list_unmatched_jobs(), (job,))
@@ -43,6 +45,7 @@ class JobProspectRepositoryTests(unittest.TestCase):
         )
         self.assertIsNotNone(created.created_at)
         self.assertEqual(created.created_at, created.updated_at)
+        self.assertEqual(created.posted_at, job.posted_at)
 
         updated_job = replace(job, title="Senior Data Engineer")
         self.repository.save_jobs((updated_job,))
@@ -133,6 +136,29 @@ class JobProspectRepositoryTests(unittest.TestCase):
             self.repository.list_resume_generation_candidates(),
             (qualifying_match,),
         )
+
+    def test_preserves_scraped_posting_date_when_later_enrichment_fails(self) -> None:
+        posted_at = datetime(2026, 8, 1, 12, tzinfo=timezone.utc)
+        scraped = JobPosting(
+            source="greenhouse",
+            external_id="job-1",
+            title="Data Engineer",
+            company="Example",
+            url="https://example.com/jobs/1",
+            description="Scraped description",
+            posted_at=posted_at,
+        )
+        self.repository.save_jobs((scraped,))
+
+        self.repository.save_jobs(
+            (replace(scraped, description="API fallback", posted_at=None),)
+        )
+
+        stored = self.repository.get(scraped.job_id)
+        unmatched = self.repository.list_unmatched_jobs()
+        self.assertEqual(stored.posted_at, posted_at)
+        self.assertEqual(unmatched[0].posted_at, posted_at)
+        self.assertEqual(unmatched[0].description, "Scraped description")
 
     def test_serializes_database_timestamps(self) -> None:
         prospect = JobProspect(

@@ -17,6 +17,7 @@ from services.job_sources import (
     CareerPage,
     CareerPageJobSource,
     GreenhouseBoard,
+    GreenhouseJobPageScraper,
     GreenhouseJobSource,
     LeverJobSource,
     LeverSite,
@@ -238,6 +239,65 @@ class JobSourceTests(unittest.IsolatedAsyncioTestCase):
                 normalizer=self.normalizer,
                 board_limit=0,
             )
+
+    async def test_greenhouse_scrapes_matching_job_pages_and_caches_results(self) -> None:
+        board_url = "https://boards-api.greenhouse.io/v1/boards/example/jobs"
+        job_url = "https://boards.greenhouse.io/example/jobs/101"
+        self.http.add("GET", board_url, "greenhouse.json", "application/json")
+        self.http.add("GET", job_url, "greenhouse_job.html", "text/html")
+        scraper = GreenhouseJobPageScraper(
+            http=self.http,
+            normalizer=self.normalizer,
+            concurrency=2,
+        )
+        source = GreenhouseJobSource(
+            (GreenhouseBoard("Example Company", "example"),),
+            http=self.http,
+            normalizer=self.normalizer,
+            scraper=scraper,
+        )
+
+        jobs = await source.search(self.query, limit=10)
+        cached_jobs = await source.search(self.query, limit=10)
+
+        self.assertEqual(jobs, cached_jobs)
+        self.assertEqual(len(jobs), 1)
+        job = jobs[0]
+        self.assertEqual(job.posted_at.date().isoformat(), "2026-07-31")
+        self.assertEqual((job.salary_min, job.salary_max), (145000, 185000))
+        self.assertEqual(job.employment_type, "FULL_TIME")
+        self.assertIn("greenhouse_scraper", job.raw)
+        requested_urls = tuple(call[1] for call in self.http.calls)
+        self.assertEqual(requested_urls.count(board_url), 1)
+        self.assertEqual(requested_urls.count(job_url), 1)
+        self.assertNotIn(
+            "https://boards.greenhouse.io/example/jobs/102",
+            requested_urls,
+        )
+
+    async def test_greenhouse_scraper_falls_back_to_api_job_on_invalid_page(self) -> None:
+        board_url = "https://boards-api.greenhouse.io/v1/boards/example/jobs"
+        job_url = "https://boards.greenhouse.io/example/jobs/101"
+        self.http.add("GET", board_url, "greenhouse.json", "application/json")
+        self.http.add("GET", job_url, "career_page_empty.html", "text/html")
+        source = GreenhouseJobSource(
+            (GreenhouseBoard("Example Company", "example"),),
+            http=self.http,
+            normalizer=self.normalizer,
+            scraper=GreenhouseJobPageScraper(
+                http=self.http,
+                normalizer=self.normalizer,
+            ),
+        )
+
+        with self.assertLogs(
+            "services.job_sources.greenhouse_scraper",
+            level="WARNING",
+        ):
+            jobs = await source.search(self.query, limit=10)
+
+        self.assertEqual(len(jobs), 1)
+        self.assertIsNone(jobs[0].posted_at)
 
     async def test_lever_normalizes_structured_salary_and_employment(self) -> None:
         url = "https://api.lever.co/v0/postings/example"

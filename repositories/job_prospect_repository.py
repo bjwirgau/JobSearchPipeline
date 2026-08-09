@@ -14,6 +14,7 @@ from models import (
     JobProspect,
     MatchResult,
 )
+from utils.dates import to_utc_naive
 
 
 class JobProspectRepository:
@@ -30,9 +31,10 @@ class JobProspectRepository:
             """
             INSERT INTO job_prospects(
                 job_id, `match`, title, company, location, salary, source, url,
-                job_data, resume_generation_candidate, resume_generation_model
+                posted_at, job_data, resume_generation_candidate,
+                resume_generation_model
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) AS incoming
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) AS incoming
             ON DUPLICATE KEY UPDATE
                 `match` = COALESCE(incoming.`match`, job_prospects.`match`),
                 title = incoming.title,
@@ -41,6 +43,7 @@ class JobProspectRepository:
                 salary = incoming.salary,
                 source = incoming.source,
                 url = incoming.url,
+                posted_at = COALESCE(incoming.posted_at, job_prospects.posted_at),
                 job_data = COALESCE(incoming.job_data, job_prospects.job_data),
                 resume_generation_candidate = incoming.resume_generation_candidate,
                 resume_generation_model = incoming.resume_generation_model,
@@ -55,6 +58,7 @@ class JobProspectRepository:
                 prospect.salary,
                 prospect.source,
                 prospect.url,
+                to_utc_naive(prospect.posted_at) if prospect.posted_at else None,
                 None,
                 prospect.resume_generation_candidate,
                 prospect.resume_generation_model,
@@ -69,10 +73,10 @@ class JobProspectRepository:
                     """
                     INSERT INTO job_prospects(
                         job_id, `match`, title, company, location, salary, source,
-                        url, job_data, resume_generation_candidate,
+                        url, posted_at, job_data, resume_generation_candidate,
                         resume_generation_model
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) AS incoming
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) AS incoming
                     ON DUPLICATE KEY UPDATE
                         `match` = COALESCE(incoming.`match`, job_prospects.`match`),
                         title = incoming.title,
@@ -81,7 +85,16 @@ class JobProspectRepository:
                         salary = incoming.salary,
                         source = incoming.source,
                         url = incoming.url,
-                        job_data = incoming.job_data,
+                        posted_at = COALESCE(
+                            incoming.posted_at,
+                            job_prospects.posted_at
+                        ),
+                        job_data = CASE
+                            WHEN incoming.posted_at IS NULL
+                                 AND job_prospects.posted_at IS NOT NULL
+                            THEN job_prospects.job_data
+                            ELSE incoming.job_data
+                        END,
                         updated_at = UTC_TIMESTAMP(6)
                     """,
                     (
@@ -93,6 +106,7 @@ class JobProspectRepository:
                         prospect.salary,
                         prospect.source,
                         prospect.url,
+                        to_utc_naive(job.posted_at) if job.posted_at else None,
                         json.dumps(job.to_dict(), ensure_ascii=False, sort_keys=True),
                         prospect.resume_generation_candidate,
                         prospect.resume_generation_model,
@@ -170,8 +184,8 @@ class JobProspectRepository:
             cursor.execute(
                 """
                 SELECT job_id, `match`, title, company, location, salary, source,
-                       url, resume_generation_candidate, resume_generation_model,
-                       created_at, updated_at
+                       url, posted_at, resume_generation_candidate,
+                       resume_generation_model, created_at, updated_at
                 FROM job_prospects
                 WHERE resume_generation_candidate = TRUE
                 ORDER BY `match` DESC, title, company
@@ -205,8 +219,8 @@ class JobProspectRepository:
             cursor.execute(
                 """
                 SELECT job_id, `match`, title, company, location, salary, source, url,
-                       resume_generation_candidate, resume_generation_model,
-                       created_at, updated_at
+                       posted_at, resume_generation_candidate,
+                       resume_generation_model, created_at, updated_at
                 FROM job_prospects
                 WHERE job_id = %s
                 """,
@@ -222,8 +236,8 @@ class JobProspectRepository:
             cursor.execute(
                 """
                 SELECT job_id, `match`, title, company, location, salary, source, url,
-                       resume_generation_candidate, resume_generation_model,
-                       created_at, updated_at
+                       posted_at, resume_generation_candidate,
+                       resume_generation_model, created_at, updated_at
                 FROM job_prospects
                 ORDER BY (`match` IS NULL), `match` DESC, title, company
                 LIMIT %s

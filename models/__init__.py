@@ -7,6 +7,7 @@ from .application import (
     DocumentArtifact,
 )
 from .candidate import CandidateProfile
+from .crawl_discovery_cursor import CrawlDiscoveryCursor
 from .company_prospect import CompanyProspect
 from .crawl_page import CrawlPage, CrawlPageType, CrawlStatus
 from .job import (
@@ -30,6 +31,7 @@ __all__ = [
     "ApplicationStatus",
     "ApplicationValidation",
     "CandidateProfile",
+    "CrawlDiscoveryCursor",
     "CompanyProspect",
     "CrawlPage",
     "CrawlPageType",

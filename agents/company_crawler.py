@@ -118,7 +118,9 @@ class GreenhouseCompanyCrawler:
 
         discovery_warning: str | None = None
         try:
-            candidates = await self._discovery.discover()
+            candidates = await self._discovery.discover(
+                excluded_urls=frozenset((*known_urls, *attempts_by_url))
+            )
         except (CompanyDiscoveryError, HttpRequestError) as error:
             if not known_urls and not attempts:
                 raise

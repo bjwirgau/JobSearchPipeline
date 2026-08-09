@@ -47,17 +47,19 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("job_prospects", self.server.tables)
         self.assertIn("company_prospects", self.server.tables)
         self.assertIn("crawl_pages", self.server.tables)
+        self.assertIn("crawl_discovery_cursors", self.server.tables)
         self.assertNotIn("applications", self.server.tables)
         self.assertNotIn("candidates", self.server.tables)
         self.assertNotIn("jobs", self.server.tables)
         self.assertFalse(self.server.resume_candidate_foreign_key)
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {2, 9},
+            {2, 11},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)
         self.assertIn("job_data", self.server.job_prospect_columns)
+        self.assertIn("posted_at", self.server.job_prospect_columns)
         self.assertIn(
             "resume_generation_candidate",
             self.server.job_prospect_columns,
@@ -101,15 +103,17 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {3, 9},
+            {3, 11},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)
         self.assertIn("job_data", self.server.job_prospect_columns)
+        self.assertIn("posted_at", self.server.job_prospect_columns)
         migrated = self.server.tables["job_prospects"]["existing-job"]
         self.assertIsNotNone(migrated["created_at"])
         self.assertIsNotNone(migrated["updated_at"])
         self.assertIsNone(migrated["job_data"])
+        self.assertIsNone(migrated["posted_at"])
         self.assertFalse(migrated["resume_generation_candidate"])
         self.assertIsNone(migrated["resume_generation_model"])
 
@@ -183,6 +187,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(qualifying["resume_generation_model"], "gpt-5.4")
         self.assertFalse(threshold["resume_generation_candidate"])
         self.assertIsNone(threshold["resume_generation_model"])
+        self.assertIn("posted_at", self.server.job_prospect_columns)
 
     def test_failed_transaction_rolls_back_and_closes(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "stop transaction"):

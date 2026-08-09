@@ -17,6 +17,7 @@ from .job_sources import (
     CareerPage,
     CareerPageJobSource,
     GreenhouseBoard,
+    GreenhouseJobPageScraper,
     GreenhouseJobSource,
     LeverJobSource,
     LeverSite,
@@ -106,11 +107,21 @@ def build_job_sources(
     for board in greenhouse_boards:
         greenhouse_boards_by_token.setdefault(board.token, board)
     if greenhouse_boards_by_token:
+        greenhouse_scraper = (
+            GreenhouseJobPageScraper(
+                http=http,
+                normalizer=normalizer,
+                concurrency=settings.greenhouse_scraper_concurrency,
+            )
+            if settings.greenhouse_scraper_enabled
+            else None
+        )
         sources.append(
             GreenhouseJobSource(
                 tuple(greenhouse_boards_by_token.values()),
                 http=http,
                 normalizer=normalizer,
+                scraper=greenhouse_scraper,
                 board_limit=board_limit,
             )
         )

@@ -7,7 +7,7 @@ project_root=$(dirname -- "$script_dir")
 log_dir="$project_root/logs"
 log_file="$log_dir/greenhouse-crawler.log"
 lock_dir="${TMPDIR:-/tmp}/job-agent-greenhouse-crawler.lock"
-crawl_limit="${JOB_AGENT_COMPANY_CRAWLER_LIMIT:-25}"
+crawl_limit="${JOB_AGENT_COMPANY_CRAWLER_LIMIT:-100}"
 
 mkdir -p "$log_dir"
 exec >>"$log_file" 2>&1

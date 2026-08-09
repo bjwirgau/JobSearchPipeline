@@ -99,9 +99,9 @@ LinkedIn login or manage browser sessions.
 Normalized jobs consistently include source identity, title, company, URL, location, description, detected skills, employment type, salary range, currency, remote status, and posting date. Missing source fields remain `None` or empty rather than being invented.
 
 MySQL stores the review-oriented projection in `job_prospects` with `job_id`,
-`match`, `title`, `company`, `location`, `salary`, `source`, `url`, `job_data`,
-`resume_generation_candidate`, `resume_generation_model`, `created_at`, and
-`updated_at` columns. `job_data` retains the complete
+`match`, `title`, `company`, `location`, `salary`, `source`, `url`, `posted_at`,
+`job_data`, `resume_generation_candidate`, `resume_generation_model`,
+`created_at`, and `updated_at` columns. `job_data` retains the complete
 normalized posting needed by the asynchronous matcher. The database assigns both UTC timestamps when a
 prospect is first stored, preserves `created_at`, and refreshes `updated_at`
 when the prospect or its match score changes. The match is nullable during
@@ -251,7 +251,25 @@ search run; the default is 25:
 
 ```env
 JOB_AGENT_GREENHOUSE_BOARD_LIMIT=25
+JOB_AGENT_GREENHOUSE_SCRAPER_ENABLED=true
+JOB_AGENT_GREENHOUSE_SCRAPER_CONCURRENCY=5
 ```
+
+Greenhouse search first uses the public Job Board API to obtain each selected
+board's openings. Jobs that match the current title and location query are then
+enriched from their public detail pages using the JSON-LD technique adapted
+from [MarcusKyung/greenhouse.io-scraper](https://github.com/MarcusKyung/greenhouse.io-scraper).
+The scraper extracts Schema.org `JobPosting` data, including the original
+`datePosted`, and stores it in the normalized payload and the queryable
+`job_prospects.posted_at` column. Detail pages are cached for the search run,
+and requests are limited by `JOB_AGENT_GREENHOUSE_SCRAPER_CONCURRENCY`.
+
+The scraper is enabled by default. Set
+`JOB_AGENT_GREENHOUSE_SCRAPER_ENABLED=false` to use only the board API. If a
+detail page is unavailable or lacks valid JobPosting JSON-LD, the API result is
+still retained and `posted_at` remains unknown instead of treating
+Greenhouse's last-update timestamp as the publication date. Third-party license
+attribution is recorded in `THIRD_PARTY_NOTICES.md`.
 
 Unsearched boards are selected first, followed by the least recently searched
 boards. To add a board that the crawler has not discovered, configure a company
@@ -277,13 +295,17 @@ for one command with `--greenhouse-board-limit`.
 ##### Crawl for Greenhouse companies
 
 The company crawler queries the Internet Archive CDX index only for public US
-Greenhouse board URLs. If that public index is unavailable, discovery falls
-back to the latest Common Crawl URL index. It extracts and deduplicates board
-tokens, then validates each candidate through Greenhouse's public Job Board
-API. Greenhouse returns the organization name for a valid board; the crawler
-then inserts that company in `company_prospects`. Successful known boards are
-excluded from future discovery runs. Failed validations use a separate retry
-queue and are retried after a shorter configurable cooldown.
+Greenhouse board URLs. It stores the next page for each hostname in
+`crawl_discovery_cursors`, so a fresh cron process continues from the prior
+run instead of repeatedly requesting page zero. When the current archive page
+contains no unseen boards, discovery supplements it with the latest Common
+Crawl URL index, which has its own cursor scoped to that crawl collection. It
+extracts and deduplicates board tokens, then validates each candidate through
+Greenhouse's public Job Board API. Greenhouse returns the organization name for
+a valid board; the crawler then inserts that company in `company_prospects`.
+Successful known boards are excluded from future validation runs. Failed
+validations use a separate retry queue and are retried after a shorter
+configurable cooldown.
 
 The crawler is disabled by default. Enable it in `.env`:
 
@@ -406,13 +428,14 @@ existing score. The matcher only selects prospects with a null match; failed
 jobs remain null and are retried by a later minute-based run.
 
 `JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT` is the maximum number of URL-index
-records inspected per supported Greenhouse hostname. `--crawl-limit` caps the
-number of unique boards validated in one run. Previously unseen boards are
-always validated before failed retries, allowing repeated runs to progress
-through the discovery set. The terminal output distinguishes raw index
-candidates, new boards, known boards, ready and deferred retries, checked
-boards, insertions, and failures. It prints every successfully validated
-company in a grid.
+records returned from the current archive page for each supported Greenhouse
+hostname. `--crawl-limit` caps the number of unique boards validated in one
+run. Previously unseen boards are always validated before failed retries, and
+the persisted page cursors make subsequent runs scan different portions of the
+indexes. Logs report the provider, hostname, and current page. The terminal
+output distinguishes raw index candidates, new boards, known boards, ready and
+deferred retries, checked boards, insertions, and failures. It prints every
+successfully validated company in a grid.
 
 The scheduled runner reads `JOB_AGENT_COMPANY_CRAWLER_LIMIT` for its
 `--crawl-limit` value. This is separate from the larger archive scan limit.

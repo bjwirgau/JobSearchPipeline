@@ -32,6 +32,7 @@ from models import (
 )
 from repositories import (
     CompanyProspectRepository,
+    CrawlDiscoveryCursorRepository,
     CrawlPageRepository,
     JobProspectRepository,
     ResumeKnowledgeRepository,
@@ -91,6 +92,7 @@ def build_container(
     initialize_schema(database)
 
     company_prospects = CompanyProspectRepository(database)
+    discovery_cursors = CrawlDiscoveryCursorRepository(database)
     crawl_pages = CrawlPageRepository(database)
     job_prospects = JobProspectRepository(database)
     resume_knowledge = ResumeKnowledgeRepository(database)
@@ -106,6 +108,7 @@ def build_container(
     company_crawler = GreenhouseCompanyCrawler(
         discovery=GreenhouseCdxDiscovery(
             http=crawler_http,
+            cursors=discovery_cursors,
             scan_limit=settings.company_crawler_scan_limit,
             request_delay_seconds=0,
         ),
@@ -354,6 +357,7 @@ def _format_job_grid(
         ("Company", 22),
         ("Location", 22),
         ("Salary", 22),
+        ("Posted", 10),
         ("Source", 12),
         ("URL", 44),
     )
@@ -365,6 +369,7 @@ def _format_job_grid(
             job.company,
             job.location or "Not provided",
             _format_salary(job),
+            job.posted_at.date().isoformat() if job.posted_at else "Unknown",
             job.source,
             job.url,
         )
@@ -380,6 +385,7 @@ def _format_search_job_grid(jobs: Sequence[JobPosting]) -> str:
         ("Company", 22),
         ("Location", 22),
         ("Salary", 22),
+        ("Posted", 10),
         ("Source", 12),
         ("URL", 44),
     )
@@ -390,6 +396,7 @@ def _format_search_job_grid(jobs: Sequence[JobPosting]) -> str:
             job.company,
             job.location or "Not provided",
             _format_salary(job),
+            job.posted_at.date().isoformat() if job.posted_at else "Unknown",
             job.source,
             job.url,
         )

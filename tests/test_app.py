@@ -144,6 +144,7 @@ class ApplicationCriteriaTests(unittest.TestCase):
 
         search_grid = _format_search_job_grid((job,))
         self.assertIn("Title", search_grid)
+        self.assertIn("Posted", search_grid)
         self.assertNotIn("Match", search_grid)
 
     def test_all_selected_sources_are_displayed(self) -> None:

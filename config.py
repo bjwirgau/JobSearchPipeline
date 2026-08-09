@@ -102,6 +102,8 @@ class Settings:
     apify_linkedin_actor_id: str = "automation-lab/linkedin-jobs-scraper"
     apify_timeout_seconds: float = 120.0
     greenhouse_board_limit: int = 25
+    greenhouse_scraper_enabled: bool = True
+    greenhouse_scraper_concurrency: int = 5
     greenhouse_boards: tuple[SourceTarget, ...] = ()
     lever_sites: tuple[SourceTarget, ...] = ()
     workday_tenants: tuple[SourceTarget, ...] = ()
@@ -190,6 +192,13 @@ class Settings:
             ),
             greenhouse_board_limit=int(
                 values.get("JOB_AGENT_GREENHOUSE_BOARD_LIMIT", "25")
+            ),
+            greenhouse_scraper_enabled=_as_bool(
+                values.get("JOB_AGENT_GREENHOUSE_SCRAPER_ENABLED"),
+                default=True,
+            ),
+            greenhouse_scraper_concurrency=int(
+                values.get("JOB_AGENT_GREENHOUSE_SCRAPER_CONCURRENCY", "5")
             ),
             greenhouse_boards=_source_targets(
                 values.get("JOB_AGENT_GREENHOUSE_BOARDS")
@@ -322,6 +331,10 @@ class Settings:
         if not 1 <= self.greenhouse_board_limit <= 1_000:
             raise ValueError(
                 "JOB_AGENT_GREENHOUSE_BOARD_LIMIT must be between 1 and 1000"
+            )
+        if not 1 <= self.greenhouse_scraper_concurrency <= 20:
+            raise ValueError(
+                "JOB_AGENT_GREENHOUSE_SCRAPER_CONCURRENCY must be between 1 and 20"
             )
         if self.browser_fallback not in {"none", "playwright", "selenium"}:
             raise ValueError("JOB_AGENT_BROWSER_FALLBACK must be none, playwright, or selenium")

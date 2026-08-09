@@ -6,11 +6,12 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Mapping, Protocol
+from typing import Mapping, Protocol
 from urllib.parse import quote, unquote, urlsplit
 
-from models import CompanyProspect
+from models import CompanyProspect, CrawlDiscoveryCursor
 
 from .http_service import HttpClient, HttpRequestError, HttpResponse
 
@@ -29,7 +30,11 @@ class GreenhouseBoardCandidate:
 
 
 class GreenhouseCompanyDiscovery(Protocol):
-    async def discover(self) -> tuple[GreenhouseBoardCandidate, ...]:
+    async def discover(
+        self,
+        *,
+        excluded_urls: frozenset[str] = frozenset(),
+    ) -> tuple[GreenhouseBoardCandidate, ...]:
         """Return unique Greenhouse board candidates."""
 
 
@@ -39,6 +44,19 @@ class GreenhouseBoardLookup(Protocol):
         candidate: GreenhouseBoardCandidate,
     ) -> CompanyProspect:
         """Validate a board candidate and retrieve its company name."""
+
+
+class CrawlDiscoveryCursorStore(Protocol):
+    def get(
+        self,
+        *,
+        provider: str,
+        scope: str,
+    ) -> CrawlDiscoveryCursor | None:
+        """Load the next page for a provider scope."""
+
+    def save(self, cursor_state: CrawlDiscoveryCursor) -> None:
+        """Persist the next page for a provider scope."""
 
 
 class GreenhouseCdxDiscovery:
@@ -55,6 +73,7 @@ class GreenhouseCdxDiscovery:
         self,
         *,
         http: HttpClient,
+        cursors: CrawlDiscoveryCursorStore | None = None,
         scan_limit: int = 5_000,
         request_delay_seconds: float = 1.0,
     ) -> None:
@@ -65,24 +84,70 @@ class GreenhouseCdxDiscovery:
                 "company crawler request delay must be between 0 and 60 seconds"
             )
         self._http = http
+        self._cursors = cursors
         self._scan_limit = scan_limit
         self._request_delay_seconds = request_delay_seconds
 
-    async def discover(self) -> tuple[GreenhouseBoardCandidate, ...]:
+    async def discover(
+        self,
+        *,
+        excluded_urls: frozenset[str] = frozenset(),
+    ) -> tuple[GreenhouseBoardCandidate, ...]:
+        archive_candidates: tuple[GreenhouseBoardCandidate, ...] = ()
+        archive_error: CompanyDiscoveryError | None = None
         try:
-            return await self._discover_from_internet_archive()
-        except CompanyDiscoveryError as archive_error:
+            archive_candidates = await self._discover_from_internet_archive()
+        except CompanyDiscoveryError as error:
+            archive_error = error
             LOGGER.warning(
                 "Internet Archive discovery failed; using Common Crawl: %s",
-                archive_error,
+                error,
             )
-            try:
-                return await self._discover_from_common_crawl()
-            except (CompanyDiscoveryError, HttpRequestError) as common_crawl_error:
-                raise CompanyDiscoveryError(
-                    "Greenhouse discovery failed through both Internet Archive "
-                    f"({archive_error}) and Common Crawl ({common_crawl_error})"
-                ) from common_crawl_error
+        else:
+            unseen_archive_candidates = tuple(
+                candidate
+                for candidate in archive_candidates
+                if candidate.company_url not in excluded_urls
+            )
+            if unseen_archive_candidates:
+                LOGGER.info(
+                    "Internet Archive page returned %d candidates (%d unseen)",
+                    len(archive_candidates),
+                    len(unseen_archive_candidates),
+                )
+                return archive_candidates
+            LOGGER.info(
+                "Internet Archive page returned no unseen boards; "
+                "supplementing it with Common Crawl"
+            )
+
+        try:
+            common_crawl_candidates = await self._discover_from_common_crawl()
+        except (CompanyDiscoveryError, HttpRequestError) as common_crawl_error:
+            if archive_candidates:
+                LOGGER.warning(
+                    "Common Crawl supplemental discovery failed; retaining "
+                    "Internet Archive candidates: %s",
+                    common_crawl_error,
+                )
+                return archive_candidates
+            raise CompanyDiscoveryError(
+                "Greenhouse discovery failed through both Internet Archive "
+                f"({archive_error}) and Common Crawl ({common_crawl_error})"
+            ) from common_crawl_error
+
+        candidates = {
+            candidate.company_url: candidate
+            for candidate in (*archive_candidates, *common_crawl_candidates)
+        }
+        LOGGER.info(
+            "Greenhouse discovery returned %d merged candidates "
+            "(%d Internet Archive, %d Common Crawl)",
+            len(candidates),
+            len(archive_candidates),
+            len(common_crawl_candidates),
+        )
+        return _sorted_candidates(candidates)
 
     async def _discover_from_common_crawl(
         self,
@@ -92,7 +157,22 @@ class GreenhouseCdxDiscovery:
         failures: list[tuple[str, HttpRequestError]] = []
         for host in self.BOARD_HOSTS:
             await self._delay_request()
+            scope = f"{urlsplit(index_url).path.rsplit('/', 1)[-1]}:{host}"
             try:
+                page, page_count = await self._current_page(
+                    provider="common_crawl",
+                    scope=scope,
+                    page_count_loader=lambda: self._common_crawl_page_count(
+                        index_url,
+                        host,
+                    ),
+                )
+                LOGGER.info(
+                    "Scanning Common Crawl for %s on page %d of %d",
+                    host,
+                    page + 1,
+                    page_count,
+                )
                 response = await self._request_common_crawl(
                     index_url,
                     params={
@@ -101,6 +181,8 @@ class GreenhouseCdxDiscovery:
                         "fl": "url",
                         "filter": "status:200",
                         "collapse": "urlkey",
+                        "page": page,
+                        "pageSize": 1,
                         "limit": self._scan_limit,
                     },
                 )
@@ -112,7 +194,14 @@ class GreenhouseCdxDiscovery:
                     error,
                 )
                 continue
-            _collect_candidates(candidates, _urls_from_cdx(response.text))
+            urls = _urls_from_cdx(response.text)
+            self._advance_cursor(
+                provider="common_crawl",
+                scope=scope,
+                page=page,
+                page_count=page_count,
+            )
+            _collect_candidates(candidates, urls)
         if not candidates:
             failed_hosts = ", ".join(host for host, _ in failures)
             failure_detail = (
@@ -124,7 +213,6 @@ class GreenhouseCdxDiscovery:
                 "Common Crawl did not return Greenhouse candidates"
                 f"{failure_detail}"
             ) from (failures[-1][1] if failures else None)
-        LOGGER.info(f"Candidates Found: {candidates}")
         return _sorted_candidates(candidates)
 
     async def _discover_from_internet_archive(
@@ -135,7 +223,20 @@ class GreenhouseCdxDiscovery:
         for host in self.BOARD_HOSTS:
             await self._delay_request()
             try:
-                response = await self._request_internet_archive(host)
+                page, page_count = await self._current_page(
+                    provider="internet_archive",
+                    scope=host,
+                    page_count_loader=lambda: self._internet_archive_page_count(
+                        host
+                    ),
+                )
+                LOGGER.info(
+                    "Scanning Internet Archive for %s on page %d of %d",
+                    host,
+                    page + 1,
+                    page_count,
+                )
+                response = await self._request_internet_archive(host, page=page)
             except HttpRequestError as error:
                 failures.append((host, error))
                 LOGGER.warning(
@@ -144,7 +245,14 @@ class GreenhouseCdxDiscovery:
                     error,
                 )
                 continue
-            _collect_candidates(candidates, _urls_from_cdx(response.text))
+            urls = _urls_from_cdx(response.text)
+            self._advance_cursor(
+                provider="internet_archive",
+                scope=host,
+                page=page,
+                page_count=page_count,
+            )
+            _collect_candidates(candidates, urls)
         if not candidates:
             failed_hosts = ", ".join(host for host, _ in failures)
             failure_detail = (
@@ -156,7 +264,41 @@ class GreenhouseCdxDiscovery:
             ) from (failures[-1][1] if failures else None)
         return _sorted_candidates(candidates)
 
-    async def _request_internet_archive(self, host: str) -> HttpResponse:
+    async def _request_internet_archive(
+        self,
+        host: str,
+        *,
+        page: int,
+    ) -> HttpResponse:
+        params = self._internet_archive_params(host)
+        params.update(
+            {
+                "output": "json",
+                "fl": "original",
+                "page": page,
+                "limit": self._scan_limit,
+            }
+        )
+        return await self._request_internet_archive_with_params(params)
+
+    async def _internet_archive_page_count(self, host: str) -> int:
+        params = self._internet_archive_params(host)
+        params["showNumPages"] = "true"
+        response = await self._request_internet_archive_with_params(params)
+        return _page_count_from_cdx(response.text)
+
+    def _internet_archive_params(self, host: str) -> dict[str, object]:
+        return {
+            "url": f"{host}/*",
+            "filter": f"original:^https?://{re.escape(host)}/[^/?]+/?$",
+            "collapse": "urlkey",
+            "pageSize": 1,
+        }
+
+    async def _request_internet_archive_with_params(
+        self,
+        params: Mapping[str, object],
+    ) -> HttpResponse:
         last_error: HttpRequestError | None = None
         for attempt in range(self.ARCHIVE_REQUEST_ATTEMPTS):
             if attempt and self._request_delay_seconds:
@@ -164,18 +306,7 @@ class GreenhouseCdxDiscovery:
             try:
                 return await self._http.get(
                     self.INTERNET_ARCHIVE_INDEX_URL,
-                    params={
-                        "url": f"{host}/*",
-                        "output": "json",
-                        "fl": "original",
-                        "filter": (
-                            f"original:^https?://{re.escape(host)}/[^/?]+/?$"
-                        ),
-                        "collapse": "urlkey",
-                        "page": 0,
-                        "pageSize": 1,
-                        "limit": self._scan_limit,
-                    },
+                    params=params,
                     headers={
                         "Accept-Encoding": "gzip",
                         "Connection": "close",
@@ -186,6 +317,72 @@ class GreenhouseCdxDiscovery:
         if last_error is None:
             raise RuntimeError("archive request attempts must be greater than zero")
         raise last_error
+
+    async def _common_crawl_page_count(self, index_url: str, host: str) -> int:
+        response = await self._request_common_crawl(
+            index_url,
+            params={
+                "url": f"{host}/*",
+                "filter": "status:200",
+                "collapse": "urlkey",
+                "showNumPages": "true",
+                "pageSize": 1,
+            },
+        )
+        return _page_count_from_cdx(response.text)
+
+    async def _current_page(
+        self,
+        *,
+        provider: str,
+        scope: str,
+        page_count_loader: Callable[[], Awaitable[int]],
+    ) -> tuple[int, int]:
+        if self._cursors is None:
+            return 0, 1
+        state = self._cursors.get(provider=provider, scope=scope)
+        if state is not None and state.next_page != 0:
+            return state.next_page, state.page_count
+        try:
+            page_count = await page_count_loader()
+        except (CompanyDiscoveryError, HttpRequestError, ValueError) as error:
+            if state is None:
+                LOGGER.warning(
+                    "Could not determine %s page count for %s; starting at "
+                    "page 1: %s",
+                    provider,
+                    scope,
+                    error,
+                )
+                return 0, 1
+            LOGGER.warning(
+                "Could not refresh %s page count for %s; retaining %d pages: %s",
+                provider,
+                scope,
+                state.page_count,
+                error,
+            )
+            page_count = state.page_count
+        return 0, page_count
+
+    def _advance_cursor(
+        self,
+        *,
+        provider: str,
+        scope: str,
+        page: int,
+        page_count: int,
+    ) -> None:
+        if self._cursors is None:
+            return
+        self._cursors.save(
+            CrawlDiscoveryCursor(
+                provider=provider,
+                scope=scope,
+                next_page=(page + 1) % page_count,
+                page_count=page_count,
+            )
+        )
 
     async def _delay_request(self) -> None:
         if self._request_delay_seconds:
@@ -271,6 +468,32 @@ def _urls_from_cdx(text: str) -> tuple[str, ...]:
     if isinstance(payload, list):
         return _urls_from_json_rows(payload)
     raise CompanyDiscoveryError("CDX service returned an invalid response")
+
+
+def _page_count_from_cdx(text: str) -> int:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise CompanyDiscoveryError(
+            "CDX service returned an invalid page count"
+        ) from error
+    if isinstance(payload, bool):
+        page_count = 0
+    elif isinstance(payload, int):
+        page_count = payload
+    elif isinstance(payload, Mapping):
+        value = payload.get("pages")
+        try:
+            page_count = int(value) if isinstance(value, (int, str)) else 0
+        except ValueError:
+            page_count = 0
+    else:
+        page_count = 0
+    if page_count < 1:
+        raise CompanyDiscoveryError(
+            "CDX service returned a non-positive page count"
+        )
+    return page_count
 
 
 def _urls_from_json_lines(text: str) -> tuple[str, ...]:

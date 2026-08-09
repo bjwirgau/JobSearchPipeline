@@ -11,7 +11,7 @@ from utils.dates import to_utc_naive, utc_now
 from .connection import Database, MySQLCursor
 
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 11
 
 SCHEMA_STATEMENTS = (
     """
@@ -39,6 +39,7 @@ SCHEMA_STATEMENTS = (
         salary VARCHAR(128) NOT NULL,
         source VARCHAR(64) NOT NULL,
         url VARCHAR(2048) NOT NULL,
+        posted_at DATETIME(6) NULL,
         job_data JSON NULL,
         resume_generation_candidate BOOLEAN NOT NULL DEFAULT FALSE,
         resume_generation_model VARCHAR(64) NULL,
@@ -89,6 +90,20 @@ SCHEMA_STATEMENTS = (
     ) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci
     """,
     """
+    CREATE TABLE IF NOT EXISTS crawl_discovery_cursors (
+        provider VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+        scope_key VARCHAR(512) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+        next_page INT UNSIGNED NOT NULL,
+        page_count INT UNSIGNED NOT NULL,
+        created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+            ON UPDATE CURRENT_TIMESTAMP(6),
+        PRIMARY KEY (provider, scope_key),
+        CONSTRAINT ck_crawl_discovery_cursor_page
+            CHECK (page_count > 0 AND next_page < page_count)
+    ) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci
+    """,
+    """
     CREATE TABLE IF NOT EXISTS workflow_runs (
         run_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
         workflow_name VARCHAR(64) NOT NULL,
@@ -121,6 +136,8 @@ def initialize_schema(database: Database) -> None:
             _add_company_prospect_job_search_timestamp(database, cursor)
         if current_version < 9:
             _add_job_prospect_resume_generation(database, cursor)
+        if current_version < 10:
+            _add_job_prospect_posted_at(database, cursor)
         cursor.execute(
             """
             INSERT IGNORE INTO schema_migrations(version, applied_at)
@@ -280,3 +297,23 @@ def _add_job_prospect_resume_generation(
         """,
         (DEFAULT_RESUME_GENERATION_MODEL,),
     )
+
+
+def _add_job_prospect_posted_at(
+    database: Database,
+    cursor: MySQLCursor,
+) -> None:
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME AS app_column_name
+        FROM information_schema.columns
+        WHERE table_schema = %s
+          AND table_name = 'job_prospects'
+          AND column_name = 'posted_at'
+        """,
+        (database.config.database,),
+    )
+    if not cursor.fetchone():
+        cursor.execute(
+            "ALTER TABLE job_prospects ADD COLUMN posted_at DATETIME(6) NULL"
+        )

@@ -101,6 +101,7 @@ class FakeMySQLCursor:
                         "salary",
                         "source",
                         "url",
+                        "posted_at",
                         "job_data",
                         "resume_generation_candidate",
                         "resume_generation_model",
@@ -121,6 +122,11 @@ class FakeMySQLCursor:
                     }
             if " crawl_pages " in statement:
                 self._connection.tables.setdefault("crawl_pages", {})
+            if " crawl_discovery_cursors " in statement:
+                self._connection.tables.setdefault(
+                    "crawl_discovery_cursors",
+                    {},
+                )
             return
         if statement.startswith("select coalesce(max(version)"):
             versions = self._connection.tables["schema_migrations"]
@@ -140,6 +146,8 @@ class FakeMySQLCursor:
             available_columns = self._connection.job_prospect_columns
             if "column_name = 'job_data'" in statement:
                 requested_columns = {"job_data"}
+            elif "column_name = 'posted_at'" in statement:
+                requested_columns = {"posted_at"}
             elif "'resume_generation_candidate'" in statement:
                 requested_columns = {
                     "resume_generation_candidate",
@@ -169,6 +177,10 @@ class FakeMySQLCursor:
                 self._connection.job_prospect_columns.add("job_data")
                 for row in self._connection.tables["job_prospects"].values():
                     row["job_data"] = None
+            if "add column posted_at" in statement:
+                self._connection.job_prospect_columns.add("posted_at")
+                for row in self._connection.tables["job_prospects"].values():
+                    row["posted_at"] = None
             if "add column resume_generation_candidate" in statement:
                 self._connection.job_prospect_columns.add(
                     "resume_generation_candidate"
@@ -222,6 +234,7 @@ class FakeMySQLCursor:
                 salary,
                 source,
                 url,
+                posted_at,
                 job_data,
                 resume_generation_candidate,
                 resume_generation_model,
@@ -241,8 +254,18 @@ class FakeMySQLCursor:
                 "salary": salary,
                 "source": source,
                 "url": url,
+                "posted_at": (
+                    posted_at
+                    if posted_at is not None
+                    else existing.get("posted_at") if existing else None
+                ),
                 "job_data": (
-                    job_data
+                    existing.get("job_data")
+                    if existing
+                    and existing.get("posted_at") is not None
+                    and posted_at is None
+                    and "when incoming.posted_at is null" in statement
+                    else job_data
                     if job_data is not None
                     else existing.get("job_data") if existing else None
                 ),
@@ -302,6 +325,23 @@ class FakeMySQLCursor:
                 "last_crawled_at": last_crawled_at,
                 "next_crawl_at": next_crawl_at,
                 "last_error": last_error,
+                "created_at": existing["created_at"] if existing else now,
+                "updated_at": now,
+            }
+            self.rowcount = 1
+            return
+        if statement.startswith("insert into crawl_discovery_cursors"):
+            provider, scope_key, next_page, page_count = values
+            key = (provider, scope_key)
+            existing = self._connection.tables["crawl_discovery_cursors"].get(
+                key
+            )
+            now = to_utc_naive(utc_now())
+            self._connection.tables["crawl_discovery_cursors"][key] = {
+                "provider": provider,
+                "scope_key": scope_key,
+                "next_page": next_page,
+                "page_count": page_count,
                 "created_at": existing["created_at"] if existing else now,
                 "updated_at": now,
             }
@@ -460,6 +500,12 @@ class FakeMySQLCursor:
                 self._rows = [
                     dict(row) for row in sorted(rows, key=lambda row: row["page_url"])
                 ]
+            return
+        if statement.startswith("select provider") and "from crawl_discovery_cursors" in statement:
+            row = self._connection.tables["crawl_discovery_cursors"].get(
+                (values[0], values[1])
+            )
+            self._rows = [dict(row)] if row else []
             return
         if statement.startswith("select payload_json from resume_knowledge"):
             self._select_payload("resume_knowledge", values[0])

@@ -15,3 +15,7 @@ The complete MySQL schema for new databases is defined in `database/schema.py`. 
   batches.
 - `009_job_resume_candidates.sql` marks matches above the resume-generation
   threshold and records the configured generation model.
+- `010_job_prospect_posted_at.sql` stores the publication timestamp extracted
+  from job-source records and Greenhouse job-page JSON-LD.
+- `011_crawl_discovery_cursors.sql` persists archive-index pagination so each
+  scheduled company crawl advances beyond the pages scanned by earlier runs.

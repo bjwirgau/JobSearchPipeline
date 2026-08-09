@@ -13,6 +13,7 @@ from services.http_service import HttpClient
 from services.job_normalization_service import JobNormalizer
 
 from .base import job_matches_query
+from .greenhouse_scraper import GreenhouseJobScraper
 
 
 LOGGER = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ class GreenhouseJobSource:
         *,
         http: HttpClient,
         normalizer: JobNormalizer,
+        scraper: GreenhouseJobScraper | None = None,
         concurrency: int = 10,
         board_limit: int = 25,
     ) -> None:
@@ -53,8 +55,11 @@ class GreenhouseJobSource:
         self._boards = unique_boards[:board_limit]
         self._http = http
         self._normalizer = normalizer
+        self._scraper = scraper
         self._cache: tuple[JobPosting, ...] | None = None
         self._cache_lock = asyncio.Lock()
+        self._scrape_cache: dict[str, JobPosting] = {}
+        self._scrape_lock = asyncio.Lock()
         self._request_limit = asyncio.Semaphore(concurrency)
 
     def supports(self, criteria: SearchCriteria) -> bool:
@@ -62,7 +67,27 @@ class GreenhouseJobSource:
 
     async def search(self, query: SearchQuery, *, limit: int) -> tuple[JobPosting, ...]:
         jobs = await self._load_jobs()
-        return tuple(job for job in jobs if job_matches_query(job, query))[:limit]
+        matches = tuple(job for job in jobs if job_matches_query(job, query))[:limit]
+        if self._scraper is not None and matches:
+            matches = await self._scrape_matches(matches)
+        return tuple(job for job in matches if job_matches_query(job, query))[:limit]
+
+    async def _scrape_matches(
+        self,
+        jobs: tuple[JobPosting, ...],
+    ) -> tuple[JobPosting, ...]:
+        async with self._scrape_lock:
+            missing = tuple(
+                job for job in jobs if job.external_id not in self._scrape_cache
+            )
+            if missing:
+                scraped = tuple(await self._scraper.scrape(missing))
+                self._scrape_cache.update(
+                    (job.external_id, job) for job in scraped
+                )
+            return tuple(
+                self._scrape_cache.get(job.external_id, job) for job in jobs
+            )
 
     async def _load_jobs(self) -> tuple[JobPosting, ...]:
         if self._cache is not None:
@@ -118,7 +143,7 @@ class GreenhouseJobSource:
                         url=record.get("absolute_url"),
                         location=location_name,
                         description=record.get("content", ""),
-                        posted_at=record.get("updated_at"),
+                        posted_at=None,
                         raw=record,
                     )
                 )

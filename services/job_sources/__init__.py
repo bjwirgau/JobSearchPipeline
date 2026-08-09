@@ -3,6 +3,10 @@
 from .adzuna import AdzunaCredentials, AdzunaJobSource
 from .career_page import CareerPage, CareerPageJobSource
 from .greenhouse import GreenhouseBoard, GreenhouseJobSource
+from .greenhouse_scraper import (
+    GreenhouseJobPageScraper,
+    GreenhouseJobScraper,
+)
 from .lever import LeverJobSource, LeverSite
 from .linkedin import ApifyLinkedInConfig, LinkedInJobSource, LinkedInWorkplaceType
 from .remotive import RemotiveJobSource
@@ -16,6 +20,8 @@ __all__ = [
     "CareerPage",
     "CareerPageJobSource",
     "GreenhouseBoard",
+    "GreenhouseJobPageScraper",
+    "GreenhouseJobScraper",
     "GreenhouseJobSource",
     "LeverJobSource",
     "LeverSite",

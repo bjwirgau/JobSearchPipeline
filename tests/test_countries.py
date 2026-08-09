@@ -104,11 +104,23 @@ class CountryEligibilityTests(unittest.TestCase):
             Settings.from_env({"JOB_AGENT_RESUME_GENERATION_MODEL": ""})
 
     def test_greenhouse_board_limit_is_validated(self) -> None:
-        settings = Settings.from_env({"JOB_AGENT_GREENHOUSE_BOARD_LIMIT": "10"})
+        settings = Settings.from_env(
+            {
+                "JOB_AGENT_GREENHOUSE_BOARD_LIMIT": "10",
+                "JOB_AGENT_GREENHOUSE_SCRAPER_ENABLED": "false",
+                "JOB_AGENT_GREENHOUSE_SCRAPER_CONCURRENCY": "3",
+            }
+        )
 
         self.assertEqual(settings.greenhouse_board_limit, 10)
+        self.assertFalse(settings.greenhouse_scraper_enabled)
+        self.assertEqual(settings.greenhouse_scraper_concurrency, 3)
         with self.assertRaisesRegex(ValueError, "GREENHOUSE_BOARD_LIMIT"):
             Settings.from_env({"JOB_AGENT_GREENHOUSE_BOARD_LIMIT": "0"})
+        with self.assertRaisesRegex(ValueError, "SCRAPER_CONCURRENCY"):
+            Settings.from_env(
+                {"JOB_AGENT_GREENHOUSE_SCRAPER_CONCURRENCY": "21"}
+            )
 
 
 if __name__ == "__main__":

@@ -10,7 +10,11 @@ from typing import Mapping
 from agents import CompanyCrawlerDisabledError, GreenhouseCompanyCrawler
 from database import Database, MySQLConfig, initialize_schema
 from models import CompanyProspect
-from repositories import CompanyProspectRepository, CrawlPageRepository
+from repositories import (
+    CompanyProspectRepository,
+    CrawlDiscoveryCursorRepository,
+    CrawlPageRepository,
+)
 from services import (
     CompanyDiscoveryError,
     GreenhouseBoardCandidate,
@@ -151,6 +155,33 @@ class FakeCommonCrawlFallbackHttpClient(FakeDiscoveryHttpClient):
         return await super().get(url, params=params, headers=headers)
 
 
+class FakeSupplementDiscoveryHttpClient(FakeFallbackDiscoveryHttpClient):
+    async def get(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, object] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> HttpResponse:
+        if (
+            url.startswith("https://index.commoncrawl.org/")
+            and not url.endswith("collinfo.json")
+        ):
+            self.calls.append((url, params))
+            host = str(params["url"]).removesuffix("/*")
+            return HttpResponse(
+                200,
+                url,
+                json.dumps(
+                    {
+                        "url": f"https://{host}/supplement/jobs/123",
+                    }
+                ),
+                {},
+            )
+        return await super().get(url, params=params, headers=headers)
+
+
 class FakeRetryArchiveHttpClient(FakeFallbackDiscoveryHttpClient):
     def __init__(self) -> None:
         super().__init__()
@@ -192,16 +223,49 @@ class FakeRetryCommonCrawlHttpClient(FakeCommonCrawlFallbackHttpClient):
         return await super().get(url, params=params, headers=headers)
 
 
+class FakePagedArchiveHttpClient(FakeDiscoveryHttpClient):
+    async def get(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, object] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> HttpResponse:
+        self.calls.append((url, params))
+        if url != GreenhouseCdxDiscovery.INTERNET_ARCHIVE_INDEX_URL:
+            raise AssertionError("unseen archive pages must avoid Common Crawl")
+        if params.get("showNumPages") == "true":
+            return HttpResponse(200, url, "3", {})
+        page = int(params["page"])
+        board_token = ("example", "second", "third")[page]
+        payload = [
+            ["original"],
+            [
+                f"https://{str(params['url']).removesuffix('/*')}/"
+                f"{board_token}"
+            ],
+        ]
+        return HttpResponse(200, url, json.dumps(payload), {})
+
+
 class StaticDiscovery:
     def __init__(self, candidates: tuple[GreenhouseBoardCandidate, ...]) -> None:
         self.candidates = candidates
 
-    async def discover(self) -> tuple[GreenhouseBoardCandidate, ...]:
+    async def discover(
+        self,
+        *,
+        excluded_urls: frozenset[str] = frozenset(),
+    ) -> tuple[GreenhouseBoardCandidate, ...]:
         return self.candidates
 
 
 class FailingDiscovery:
-    async def discover(self) -> tuple[GreenhouseBoardCandidate, ...]:
+    async def discover(
+        self,
+        *,
+        excluded_urls: frozenset[str] = frozenset(),
+    ) -> tuple[GreenhouseBoardCandidate, ...]:
         raise CompanyDiscoveryError("public indexes unavailable")
 
 
@@ -231,6 +295,7 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
         )
         initialize_schema(database)
         self.repository = CompanyProspectRepository(database)
+        self.discovery_cursors = CrawlDiscoveryCursorRepository(database)
         self.crawl_pages = CrawlPageRepository(database)
 
     async def test_archive_discovers_and_deduplicates_us_boards(self) -> None:
@@ -256,6 +321,43 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(
             all(call[1]["limit"] == 500 for call in http.calls)
         )
+
+    async def test_archive_discovery_advances_to_the_next_page(self) -> None:
+        http = FakePagedArchiveHttpClient()
+        discovery = GreenhouseCdxDiscovery(
+            http=http,
+            cursors=self.discovery_cursors,
+            scan_limit=25,
+            request_delay_seconds=0,
+        )
+
+        first = await discovery.discover()
+        second = await discovery.discover(
+            excluded_urls=frozenset(
+                candidate.company_url for candidate in first
+            )
+        )
+
+        self.assertEqual(
+            {candidate.board_token for candidate in first},
+            {"example"},
+        )
+        self.assertEqual(
+            {candidate.board_token for candidate in second},
+            {"second"},
+        )
+        result_pages = [
+            int(params["page"])
+            for _, params in http.calls
+            if params.get("showNumPages") != "true"
+        ]
+        self.assertEqual(result_pages, [0, 0, 1, 1])
+        state = self.discovery_cursors.get(
+            provider="internet_archive",
+            scope="job-boards.greenhouse.io",
+        )
+        self.assertEqual(state.next_page, 2)
+        self.assertEqual(state.page_count, 3)
 
     async def test_primary_archive_avoids_unhealthy_common_crawl(self) -> None:
         http = FakeFallbackDiscoveryHttpClient()
@@ -292,6 +394,31 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertFalse(
+            any(
+                call[0].startswith("https://index.commoncrawl.org/")
+                for call in http.calls
+            )
+        )
+
+    async def test_known_archive_page_is_supplemented_by_common_crawl(self) -> None:
+        http = FakeSupplementDiscoveryHttpClient()
+        discovery = GreenhouseCdxDiscovery(
+            http=http,
+            scan_limit=100,
+            request_delay_seconds=0,
+        )
+
+        candidates = await discovery.discover(
+            excluded_urls=frozenset(
+                {"https://job-boards.greenhouse.io/example"}
+            )
+        )
+
+        self.assertEqual(
+            {candidate.board_token for candidate in candidates},
+            {"example", "supplement"},
+        )
+        self.assertTrue(
             any(
                 call[0].startswith("https://index.commoncrawl.org/")
                 for call in http.calls

@@ -26,6 +26,7 @@ class JobProspect:
     salary: str
     source: str
     url: str
+    posted_at: datetime | None = None
     resume_generation_candidate: bool = False
     resume_generation_model: str | None = None
     created_at: datetime | None = None
@@ -48,7 +49,7 @@ class JobProspect:
             raise ValueError(
                 "resume_generation_model is required for a resume candidate"
             )
-        for field_name in ("created_at", "updated_at"):
+        for field_name in ("posted_at", "created_at", "updated_at"):
             value = getattr(self, field_name)
             if value is not None:
                 object.__setattr__(self, field_name, ensure_utc(value))
@@ -71,6 +72,7 @@ class JobProspect:
             salary=_format_salary(job),
             source=job.source,
             url=job.url,
+            posted_at=job.posted_at,
             resume_generation_candidate=resume_generation_candidate,
             resume_generation_model=resume_generation_model,
         )
@@ -91,6 +93,7 @@ class JobProspect:
             salary=str(row["salary"]),
             source=str(row["source"]),
             url=str(row["url"]),
+            posted_at=_timestamp(row.get("posted_at")),
             resume_generation_candidate=bool(
                 row.get("resume_generation_candidate", False)
             ),
@@ -113,6 +116,7 @@ class JobProspect:
             "salary": self.salary,
             "source": self.source,
             "url": self.url,
+            "posted_at": to_iso(self.posted_at),
             "resume_generation_candidate": self.resume_generation_candidate,
             "resume_generation_model": self.resume_generation_model,
             "created_at": to_iso(self.created_at),
