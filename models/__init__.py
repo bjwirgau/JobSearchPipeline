@@ -26,6 +26,7 @@ from .generated_resume import (
     GeneratedResumeContent,
     GeneratedResumeRole,
     InvalidGeneratedResumeError,
+    ResumeDocumentFormat,
 )
 from .match import MatchBreakdown, MatchResult
 from .resume import (
@@ -59,6 +60,7 @@ __all__ = [
     "MatchResult",
     "ResumeAchievement",
     "ResumeCertification",
+    "ResumeDocumentFormat",
     "ResumeEducation",
     "ResumeKnowledgeBase",
     "ResumeRole",

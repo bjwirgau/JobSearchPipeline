@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Mapping
 
 from .resume import (
@@ -17,6 +18,30 @@ from utils.text import normalize_text
 
 class InvalidGeneratedResumeError(ValueError):
     pass
+
+
+class ResumeDocumentFormat(str, Enum):
+    HTML = "html"
+    DOCX = "docx"
+    BOTH = "both"
+
+    @classmethod
+    def parse(cls, value: "ResumeDocumentFormat | str") -> "ResumeDocumentFormat":
+        if isinstance(value, cls):
+            return value
+        try:
+            return cls(value.strip().casefold())
+        except (AttributeError, ValueError) as error:
+            supported = ", ".join(member.value for member in cls)
+            raise ValueError(
+                f"unsupported resume document format; choose from: {supported}"
+            ) from error
+
+    @property
+    def extensions(self) -> tuple[str, ...]:
+        if self is ResumeDocumentFormat.BOTH:
+            return (ResumeDocumentFormat.HTML.value, ResumeDocumentFormat.DOCX.value)
+        return (self.value,)
 
 
 def _string(value: object, field: str, *, required: bool = True) -> str:

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Brandon Wirgau — Resume</title>
+  <style>
+:root {
+  color-scheme: light;
+  --ink: #172033;
+  --muted: #536176;
+  --accent: #1d4e89;
+  --rule: #d8dee8;
+  --paper: #ffffff;
+  --canvas: #eef1f5;
+}
+
+* { box-sizing: border-box; }
+
+html { font-size: 10.5pt; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.42;
+}
+
+.resume {
+  width: min(8.5in, 100%);
+  min-height: 11in;
+  margin: 32px auto;
+  padding: 0.62in 0.7in;
+  background: var(--paper);
+  box-shadow: 0 14px 40px rgba(23, 32, 51, 0.13);
+}
+
+.resume-header {
+  padding-bottom: 18px;
+  border-bottom: 3px solid var(--accent);
+}
+
+h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 26pt;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+}
+
+.contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 9.5pt;
+}
+
+.contact a {
+  color: inherit;
+  text-decoration: none;
+}
+
+section { margin-top: 20px; }
+
+h2 {
+  margin: 0 0 9px;
+  padding-bottom: 4px;
+  color: var(--accent);
+  border-bottom: 1px solid var(--rule);
+  font-size: 10.5pt;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+p { margin: 0; }
+
+.summary { color: #273349; }
+
+.skills-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skills-list li {
+  position: relative;
+  padding-left: 10px;
+}
+
+.skills-list li::before {
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  content: "•";
+}
+
+.role { break-inside: avoid; }
+.role + .role { margin-top: 15px; }
+
+.role-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+}
+
+h3 {
+  margin: 0;
+  font-size: 11.5pt;
+  font-weight: 700;
+}
+
+.company {
+  margin-top: 1px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.company-location { font-weight: 400; }
+
+.dates {
+  color: var(--muted);
+  font-size: 9.25pt;
+  white-space: nowrap;
+}
+
+.details {
+  margin: 7px 0 0;
+  padding-left: 18px;
+}
+
+.details li { margin-top: 3px; }
+
+.compact-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.compact-list li + li { margin-top: 3px; }
+
+.credential { break-inside: avoid; }
+.credential + .credential { margin-top: 10px; }
+
+.credential-meta {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9.25pt;
+}
+
+.highlight-category { color: var(--accent); }
+
+@page { size: Letter; margin: 0.5in 0.58in; }
+
+@media print {
+  html { font-size: 10pt; }
+  body { background: #ffffff; }
+  .resume {
+    width: auto;
+    min-height: auto;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 650px) {
+  .resume { margin: 0; padding: 28px 24px; }
+  .role-heading { grid-template-columns: 1fr; gap: 2px; }
+  .dates { white-space: normal; }
+}
+  </style>
+</head>
+<body>
+  <main class="resume" data-document="tailored-resume">
+    <header class="resume-header">
+      <h1>Brandon Wirgau</h1>
+      <p class="contact"><a href="mailto:brandonjoelwirgau@gmail.com">brandonjoelwirgau@gmail.com</a><span>El Paso, TX</span></p>
+    </header>
+    <section><h2>Professional Summary</h2><p class="summary">Senior Software Engineer with 10+ years of experience building scalable e-commerce and web applications using Adobe Commerce (Magento), PHP frameworks such as Laravel, and modern JavaScript frameworks including React and Next.js. Experienced in system architecture, API integrations, DevOps, CI/CD, cloud infrastructure, security, database optimization, Agile Development, Technical Leadership, Code Review, Technical Documentation, and LLM-Assisted Development.</p></section>
+    <section><h2>Core Skills</h2><ul class="skills-list"><li>PHP</li><li>Git</li><li>Adobe Commerce (Magento)</li><li>Laravel</li><li>JavaScript</li><li>REST APIs</li><li>MySQL</li><li>Docker</li><li>AWS</li><li>AWS EC2</li><li>CI/CD</li><li>DevOps</li><li>Bitbucket Pipelines</li><li>Jenkins</li><li>PHPUnit</li><li>Varnish</li><li>Adobe Commerce Cloud</li><li>System Architecture</li><li>System Integration</li><li>Performance Optimization</li><li>Database Optimization</li><li>Security</li><li>Agile Development</li><li>Technical Leadership</li><li>Code Review</li><li>Technical Documentation</li><li>LLM-Assisted Development</li><li>Claude Code</li><li>GitHub Copilot</li><li>KnockoutJS</li><li>CSS</li><li>LESS</li></ul></section>
+    <section><h2>Professional Experience</h2><article class="role"><div class="role-heading"><div><h3>Lead Magento Engineer</h3><p class="company">Crazy Crab <span class="company-location">• El Paso, TX</span></p></div><p class="dates">2025-08 – Present</p></div><ul class="details"><li>Developed a full-stack e-commerce platform using Magento, PHP, JavaScript, LESS, MySQL, and Docker.</li><li>Designed scalable system architecture focused on application performance, maintainability, and reliability.</li><li>Led requirements gathering with cross-functional stakeholders and translated business requirements into technical specifications.</li><li>Mentored and coordinated development tasks with another engineer through Agile workflows and pull request reviews.</li><li>Used Claude Code and GitHub Copilot to accelerate development while reviewing generated code for performance, security, maintainability, and accuracy.</li><li>Managed Magento platform enhancements, integrations, and production support.</li><li>Built Magento PageBuilder content experiences that enabled non-technical users to manage website content.</li></ul></article><article class="role"><div class="role-heading"><div><h3>Magento Engineer (Contract)</h3><p class="company">Insight Global <span class="company-location">• Remote, US</span></p></div><p class="dates">2025-03 – 2025-08</p></div><ul class="details"><li>Improved Lighthouse scores into the mid-90s by reducing layout shift and optimizing JavaScript.</li><li>Reduced backend load times to under one second by installing and configuring Varnish.</li><li>Resolved a checkout timeout caused by invalid shipping API credentials, doubling conversion rate.</li><li>Managed AWS EC2 instances and access configuration.</li><li>Migrated manual deployments to Bitbucket Pipelines for staging and production.</li><li>Refactored a PHP product export module using single responsibility principles to improve maintainability.</li></ul></article><article class="role"><div class="role-heading"><div><h3>Senior Magento Engineer</h3><p class="company">Merkle <span class="company-location">• Remote, US</span></p></div><p class="dates">2022-03 – 2024-09</p></div><ul class="details"><li>Led a cross-functional initiative integrating a middleware REST API with Magento checkout functionality.</li><li>Customized bundle products and frontend components using JavaScript, KnockoutJS, and CSS.</li><li>Developed product detail and product listing features integrating PIM product data and Sitecore CMS content.</li><li>Deployed staging and production environments using Adobe Commerce Cloud and CLI tooling.</li><li>Mentored junior developers through onboarding, environment troubleshooting, pull request reviews, and technical guidance.</li><li>Created technical documentation covering cross-functional applications, development environments, recurring issues, and core features.</li><li>Supported enterprise clients including Nestle and Balfour.</li><li>Diagnosed and resolved production issues to reduce downtime and improve reliability.</li></ul></article><article class="role"><div class="role-heading"><div><h3>Magento Engineer</h3><p class="company">DEG Digital <span class="company-location">• Overland Park, KS</span></p></div><p class="dates">2015-08 – 2022-03</p></div><ul class="details"><li>Developed scalable Magento solutions using established software design patterns and MVC architecture.</li><li>Supported up to five clients concurrently, delivering bug fixes, security updates, and feature enhancements.</li><li>Investigated and remediated a client-side security breach involving malicious credit card scraping scripts.</li><li>Optimized relational database queries for Magento re-indexing and order processing.</li><li>Implemented automated testing using PHPUnit.</li><li>Worked in Agile development environments using Git branching, code review, estimation, and release management.</li><li>Implemented DevOps and CI/CD workflows using Jenkins and Bitbucket Pipelines.</li><li>Supported Magento integrations with CRM and ERP platforms for order, inventory, and customer synchronization.</li></ul></article></section>
+    <section><h2>Career Highlights</h2><ul class="compact-list"><li><strong class="highlight-category">AI-Assisted Development:</strong> Used Claude Code and GitHub Copilot to accelerate software development while reviewing AI-generated code for accuracy, security, performance, maintainability, and production viability.</li><li><strong class="highlight-category">API Integration:</strong> Led development of a Magento checkout integration with a middleware REST API that enabled students to locate and apply available funds toward graduation ring purchases.</li><li><strong class="highlight-category">Performance:</strong> Improved Lighthouse performance scores from low scores into the mid-90s through JavaScript optimization and layout shift reduction.</li><li><strong class="highlight-category">Performance:</strong> Reduced backend page load times to under one second by installing and configuring Varnish caching.</li><li><strong class="highlight-category">CI/CD:</strong> Migrated manual deployments to Bitbucket Pipelines, improving deployment speed by approximately 50% and increasing staging and production deployment reliability.</li><li><strong class="highlight-category">Database Optimization:</strong> Optimized relational database queries used for Magento re-indexing and order processing, improving performance by approximately 30% and reducing errors.</li><li><strong class="highlight-category">Security:</strong> Conducted post-incident analysis and remediation following a client-side breach involving malicious scripts that scraped credit card information.</li><li><strong class="highlight-category">Leadership:</strong> Mentored developers through onboarding, pull request reviews, environment troubleshooting, technical guidance, and Agile development workflows.</li></ul></section>
+    <section><h2>Education</h2><article class="credential"><h3>Master of Science in Applied Artificial Intelligence</h3><p class="company">University of San Diego</p><p class="credential-meta">San Diego, CA • In Progress</p></article><article class="credential"><h3>Bachelor of Science in Computer Engineering</h3><p class="company">Wichita State University</p><p class="credential-meta">Wichita, KS</p></article></section>
+    <section><h2>Certifications</h2><article class="credential"><h3>Adobe Certified Expert - Adobe Commerce Developer</h3><p class="credential-meta">Issued 2023-07 • Current</p></article><article class="credential"><h3>Amazon Web Services Cloud Practitioner</h3><p class="credential-meta">Issued 2026-03 • Current</p></article></section>
+  </main>
+</body>
+</html>

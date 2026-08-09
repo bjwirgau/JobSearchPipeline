@@ -38,6 +38,7 @@ from .openai_resume_service import (
     ResumeGenerator,
 )
 from .resume_knowledge_service import ResumeKnowledgeError, ResumeKnowledgeService
+from .resume_docx_renderer import MissingDocxDependencyError, ResumeDocxRenderer
 from .resume_html_renderer import RESUME_CSS, ResumeHTMLRenderer
 
 __all__ = [
@@ -71,6 +72,8 @@ __all__ = [
     "ResumeGenerator",
     "ResumeKnowledgeError",
     "ResumeKnowledgeService",
+    "MissingDocxDependencyError",
+    "ResumeDocxRenderer",
     "RESUME_CSS",
     "ResumeHTMLRenderer",
     "RequestsHttpClient",

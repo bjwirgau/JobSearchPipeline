@@ -9,9 +9,15 @@ from models import (
     DocumentArtifact,
     GeneratedResumeContent,
     JobPosting,
+    ResumeDocumentFormat,
     ResumeKnowledgeBase,
 )
-from services import DocumentService, ResumeGenerator, ResumeHTMLRenderer
+from services import (
+    DocumentService,
+    ResumeDocxRenderer,
+    ResumeGenerator,
+    ResumeHTMLRenderer,
+)
 
 
 PROMPT_FIELDS = ("candidate_profile", "resume_knowledge", "job_posting")
@@ -25,6 +31,7 @@ class ResumeGenerationAgent:
         documents: DocumentService,
         prompt_template: str,
         renderer: ResumeHTMLRenderer | None = None,
+        docx_renderer: ResumeDocxRenderer | None = None,
     ) -> None:
         missing_fields = [
             field for field in PROMPT_FIELDS if "{" + field + "}" not in prompt_template
@@ -38,6 +45,7 @@ class ResumeGenerationAgent:
         self._documents = documents
         self._prompt_template = prompt_template
         self._renderer = renderer or ResumeHTMLRenderer()
+        self._docx_renderer = docx_renderer or ResumeDocxRenderer()
 
     async def generate(
         self,
@@ -46,7 +54,8 @@ class ResumeGenerationAgent:
         knowledge: ResumeKnowledgeBase,
         job: JobPosting,
         model: str,
-    ) -> DocumentArtifact:
+        document_format: ResumeDocumentFormat | str = ResumeDocumentFormat.HTML,
+    ) -> tuple[DocumentArtifact, ...]:
         if candidate.candidate_id != knowledge.candidate_id:
             raise ValueError(
                 "candidate profile and resume knowledge must have the same candidate_id"
@@ -58,13 +67,30 @@ class ResumeGenerationAgent:
             knowledge,
             candidate_skills=candidate.skills,
         )
-        document = self._renderer.render(candidate, content)
-        return self._documents.save_text(
-            kind="tailored-resume",
-            name=f"{candidate.candidate_id}-{job.job_id}",
-            content=document,
-            extension="html",
-        )
+        resolved_format = ResumeDocumentFormat.parse(document_format)
+        name = f"{candidate.candidate_id}-{job.job_id}"
+        artifacts: list[DocumentArtifact] = []
+        if ResumeDocumentFormat.HTML.value in resolved_format.extensions:
+            document = self._renderer.render(candidate, content)
+            artifacts.append(
+                self._documents.save_text(
+                    kind="tailored-resume",
+                    name=name,
+                    content=document,
+                    extension=ResumeDocumentFormat.HTML.value,
+                )
+            )
+        if ResumeDocumentFormat.DOCX.value in resolved_format.extensions:
+            document = self._docx_renderer.render(candidate, content)
+            artifacts.append(
+                self._documents.save_bytes(
+                    kind="tailored-resume",
+                    name=name,
+                    content=document,
+                    extension=ResumeDocumentFormat.DOCX.value,
+                )
+            )
+        return tuple(artifacts)
 
     def _render_prompt(
         self,

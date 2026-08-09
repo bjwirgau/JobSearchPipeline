@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from models import DocumentArtifact
-from utils.hashing import stable_hash
+from utils.hashing import stable_bytes_hash, stable_hash
 
 
 class DocumentService:
@@ -30,6 +30,26 @@ class DocumentService:
             kind=safe_kind,
             path=str(path),
             content_hash=stable_hash(content),
+        )
+
+    def save_bytes(
+        self,
+        *,
+        kind: str,
+        name: str,
+        content: bytes,
+        extension: str,
+    ) -> DocumentArtifact:
+        safe_kind = self._safe_component(kind)
+        safe_name = self._safe_component(name)
+        safe_extension = self._safe_extension(extension)
+        self._output_directory.mkdir(parents=True, exist_ok=True)
+        path = self._output_directory / f"{safe_name}-{safe_kind}.{safe_extension}"
+        path.write_bytes(content)
+        return DocumentArtifact(
+            kind=safe_kind,
+            path=str(path),
+            content_hash=stable_bytes_hash(content),
         )
 
     @staticmethod

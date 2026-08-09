@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,6 +16,7 @@ from models import (
     JobProspect,
     MatchBreakdown,
     MatchResult,
+    ResumeDocumentFormat,
     ResumeKnowledgeBase,
 )
 from repositories import JobProspectRepository
@@ -233,6 +235,45 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 )
 
         self.assertEqual(generator.calls, [])
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("docx"),
+        "python-docx is not installed",
+    )
+    async def test_generates_html_and_docx_from_one_model_response(self) -> None:
+        self.repository.save_jobs((self.job,))
+        self.repository.update_matches(
+            (
+                MatchResult(
+                    candidate_id=self.candidate.candidate_id,
+                    job_id=self.job.job_id,
+                    score=0.9,
+                    breakdown=MatchBreakdown(
+                        skills=0.9,
+                        title=0.9,
+                        location=0.9,
+                        experience=0.9,
+                    ),
+                ),
+            )
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            workflow, generator = self._workflow(directory)
+
+            result = await workflow.run(
+                job_id=self.job.job_id,
+                candidate=self.candidate,
+                knowledge=self.knowledge,
+                document_format=ResumeDocumentFormat.BOTH,
+            )
+
+            self.assertEqual(len(generator.calls), 1)
+            self.assertEqual(len(result.artifacts), 2)
+            paths = tuple(Path(artifact.path) for artifact in result.artifacts)
+            self.assertEqual({path.suffix for path in paths}, {".html", ".docx"})
+            self.assertTrue(all(path.exists() for path in paths))
+            docx_path = next(path for path in paths if path.suffix == ".docx")
+            self.assertTrue(docx_path.read_bytes().startswith(b"PK"))
 
     async def test_reports_unknown_job(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

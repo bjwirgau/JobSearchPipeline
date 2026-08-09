@@ -11,6 +11,7 @@ from models import (
     DocumentArtifact,
     JobPosting,
     JobProspect,
+    ResumeDocumentFormat,
     ResumeKnowledgeBase,
 )
 from repositories import JobProspectRepository
@@ -35,8 +36,14 @@ class ResumeGenerationJobDataError(ValueError):
 class ResumeGenerationWorkflowResult:
     prospect: JobProspect
     job: JobPosting
-    artifact: DocumentArtifact
+    artifacts: tuple[DocumentArtifact, ...]
     model: str
+
+    @property
+    def artifact(self) -> DocumentArtifact:
+        """Return the first artifact for callers expecting a single document."""
+
+        return self.artifacts[0]
 
 
 class ResumeGenerationWorkflow:
@@ -55,6 +62,7 @@ class ResumeGenerationWorkflow:
         job_id: str,
         candidate: CandidateProfile,
         knowledge: ResumeKnowledgeBase,
+        document_format: ResumeDocumentFormat | str = ResumeDocumentFormat.HTML,
     ) -> ResumeGenerationWorkflowResult:
         resolved_job_id = job_id.strip()
         if not resolved_job_id:
@@ -84,15 +92,17 @@ class ResumeGenerationWorkflow:
             job.company,
             prospect.resume_generation_model,
         )
-        artifact = await self._agent.generate(
+        resolved_format = ResumeDocumentFormat.parse(document_format)
+        artifacts = await self._agent.generate(
             candidate=candidate,
             knowledge=knowledge,
             job=job,
             model=prospect.resume_generation_model,
+            document_format=resolved_format,
         )
         return ResumeGenerationWorkflowResult(
             prospect=prospect,
             job=job,
-            artifact=artifact,
+            artifacts=artifacts,
             model=prospect.resume_generation_model,
         )

@@ -240,23 +240,33 @@ Generate exactly one resume by its full `job_id`:
 python3 app.py --generate-resume JOB_ID
 ```
 
+HTML remains the default. Use `--resume-format` to generate an editable Microsoft
+Word document or both supported formats from the same OpenAI response:
+
+```bash
+python3 app.py --generate-resume JOB_ID --resume-format docx
+python3 app.py --generate-resume JOB_ID --resume-format both
+```
+
 The command rejects unknown jobs, unchecked jobs, and jobs that were checked but
 did not pass the configured threshold. It uses the model stored on that job,
 loads the normalized posting plus the reviewed candidate knowledge, and makes
 one OpenAI Responses API request with response storage disabled. GPT returns
 schema-constrained resume content rather than document markup. The application
 validates selected responsibilities and structured factual records against the
-reviewed candidate knowledge and renders a standalone, ATS-friendly HTML resume
-with embedded professional CSS. Candidate contact details are added locally and
-are not included in the model request. The prompt also excludes the raw scraper
-payload and local source-resume path.
+reviewed candidate knowledge and renders a standalone, ATS-friendly HTML resume,
+an editable DOCX resume, or both. The DOCX is created natively with professional
+Word styles rather than converted from browser CSS. Candidate contact details are
+added locally and are not included in the model request. The prompt also excludes
+the raw scraper payload and local source-resume path.
 
-The generated `.html` file is written to `JOB_AGENT_GENERATED_DOCUMENTS`
-(default: `data/generated_documents`) and is ignored by Git. Open it in a browser
-to review it or use the browser's **Print → Save as PDF** function when a PDF is
-needed. Running the command again for the same candidate and job replaces that
-job's existing generated file. Always review the document before using it in an
-application.
+Generated `.html` and `.docx` files are written to
+`JOB_AGENT_GENERATED_DOCUMENTS` (default: `data/generated_documents`) and are
+ignored by Git. Open HTML in a browser to review it or use the browser's
+**Print → Save as PDF** function when a PDF is needed. DOCX files can be edited in
+Microsoft Word, LibreOffice Writer, or another compatible editor. Running the
+command again for the same candidate, job, and format replaces the existing file.
+Always review the document before using it in an application.
 
 ### Enable and Configure Job Searching
 

@@ -29,3 +29,7 @@ def canonicalize_url(url: str) -> str:
 def stable_hash(*values: str, length: int = 24) -> str:
     payload = "\x1f".join(value.strip().casefold() for value in values)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:length]
+
+
+def stable_bytes_hash(value: bytes, *, length: int = 24) -> str:
+    return hashlib.sha256(value).hexdigest()[:length]

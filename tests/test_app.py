@@ -194,11 +194,12 @@ class ApplicationCriteriaTests(unittest.TestCase):
 
     def test_resume_generation_accepts_one_job_id_as_a_separate_command(self) -> None:
         arguments = _arguments(
-            ["--generate-resume", "job-123"],
+            ["--generate-resume", "job-123", "--resume-format", "both"],
             settings=self.settings,
         )
 
         self.assertEqual(arguments.generate_resume, "job-123")
+        self.assertEqual(arguments.resume_format, "both")
         errors = io.StringIO()
         with redirect_stderr(errors), self.assertRaises(SystemExit):
             _arguments(
@@ -206,6 +207,11 @@ class ApplicationCriteriaTests(unittest.TestCase):
                 settings=self.settings,
             )
         self.assertIn("cannot be combined", errors.getvalue())
+
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            _arguments(["--resume-format", "docx"], settings=self.settings)
+        self.assertIn("requires --generate-resume", errors.getvalue())
 
     def test_greenhouse_board_limit_is_configurable_and_validated(self) -> None:
         arguments = _arguments(

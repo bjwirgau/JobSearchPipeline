@@ -48,6 +48,7 @@ from services import (
     GreenhouseCdxDiscovery,
     GreenhousePublicBoardLookup,
     LoggingNotificationService,
+    MissingDocxDependencyError,
     MissingOpenAIDependencyError,
     OpenAIResumeConfig,
     OpenAIResumeGenerator,
@@ -264,6 +265,11 @@ def _arguments(
         help="generate one resume for a job marked as a resume candidate",
     )
     parser.add_argument(
+        "--resume-format",
+        choices=("html", "docx", "both"),
+        help="generated resume format; defaults to html",
+    )
+    parser.add_argument(
         "--match-limit",
         type=int,
         default=settings.matching_max_requests_per_run if settings else 15,
@@ -353,6 +359,8 @@ def _arguments(
         parser.error("--greenhouse-board-limit must be between 1 and 1000")
     if arguments.dry_run and not arguments.search:
         parser.error("--dry-run requires --search")
+    if arguments.resume_format and not arguments.generate_resume:
+        parser.error("--resume-format requires --generate-resume")
     unsupported_dry_run_sources = tuple(
         source
         for source in arguments.source
@@ -636,6 +644,7 @@ async def _run_resume_generation(
     container: JobAgentContainer,
     *,
     job_id: str,
+    document_format: str = "html",
 ) -> int:
     if not container.settings.openai_api_key:
         logging.getLogger(__name__).error(
@@ -649,6 +658,7 @@ async def _run_resume_generation(
             job_id=job_id,
             candidate=candidate,
             knowledge=knowledge,
+            document_format=document_format,
         )
     except (
         ResumeGenerationJobDataError,
@@ -657,6 +667,7 @@ async def _run_resume_generation(
         ResumeGenerationNotConfiguredError,
         ResumeGenerationResponseError,
         ResumeKnowledgeError,
+        MissingDocxDependencyError,
         MissingOpenAIDependencyError,
         TypeError,
         ValueError,
@@ -667,7 +678,9 @@ async def _run_resume_generation(
     print(f"Generated resume for {result.job.title} at {result.job.company}.")
     print(f"Job ID: {result.job.job_id}")
     print(f"Model: {result.model}")
-    print(f"Saved: {result.artifact.path}")
+    for artifact in result.artifacts:
+        suffix = Path(artifact.path).suffix.removeprefix(".").upper()
+        print(f"Saved ({suffix}): {artifact.path}")
     return 0
 
 
@@ -753,6 +766,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             _run_resume_generation(
                 container,
                 job_id=arguments.generate_resume,
+                document_format=arguments.resume_format or "html",
             )
         )
     if arguments.search:
