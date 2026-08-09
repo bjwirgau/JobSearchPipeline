@@ -103,6 +103,7 @@ class FakeMySQLCursor:
                         "url",
                         "posted_at",
                         "job_data",
+                        "resume_generation_checked",
                         "resume_generation_candidate",
                         "resume_generation_model",
                         "created_at",
@@ -148,6 +149,8 @@ class FakeMySQLCursor:
                 requested_columns = {"job_data"}
             elif "column_name = 'posted_at'" in statement:
                 requested_columns = {"posted_at"}
+            elif "column_name = 'resume_generation_checked'" in statement:
+                requested_columns = {"resume_generation_checked"}
             elif "'resume_generation_candidate'" in statement:
                 requested_columns = {
                     "resume_generation_candidate",
@@ -181,6 +184,12 @@ class FakeMySQLCursor:
                 self._connection.job_prospect_columns.add("posted_at")
                 for row in self._connection.tables["job_prospects"].values():
                     row["posted_at"] = None
+            if "add column resume_generation_checked" in statement:
+                self._connection.job_prospect_columns.add(
+                    "resume_generation_checked"
+                )
+                for row in self._connection.tables["job_prospects"].values():
+                    row["resume_generation_checked"] = False
             if "add column resume_generation_candidate" in statement:
                 self._connection.job_prospect_columns.add(
                     "resume_generation_candidate"
@@ -236,6 +245,7 @@ class FakeMySQLCursor:
                 url,
                 posted_at,
                 job_data,
+                resume_generation_checked,
                 resume_generation_candidate,
                 resume_generation_model,
             ) = values
@@ -268,6 +278,12 @@ class FakeMySQLCursor:
                     else job_data
                     if job_data is not None
                     else existing.get("job_data") if existing else None
+                ),
+                "resume_generation_checked": (
+                    resume_generation_checked
+                    if existing is None
+                    or "resume_generation_checked = incoming" in statement
+                    else existing.get("resume_generation_checked", False)
                 ),
                 "resume_generation_candidate": (
                     resume_generation_candidate
@@ -374,6 +390,7 @@ class FakeMySQLCursor:
             row = self._connection.tables["job_prospects"].get(job_id)
             if row:
                 row["match"] = match
+                row["resume_generation_checked"] = True
                 row["resume_generation_candidate"] = resume_candidate
                 row["resume_generation_model"] = resume_model
                 row["updated_at"] = to_utc_naive(utc_now())
@@ -394,7 +411,8 @@ class FakeMySQLCursor:
                 (
                     row
                     for row in self._connection.tables["job_prospects"].values()
-                    if row["match"] is None and row.get("job_data") is not None
+                    if not row.get("resume_generation_checked", False)
+                    and row.get("job_data") is not None
                 ),
                 key=lambda row: (row["created_at"], row["job_id"]),
             )[:limit]
@@ -413,7 +431,7 @@ class FakeMySQLCursor:
                     if row["job_id"] in selected_ids and row["match"] is not None
                 ]
                 return
-            if "where resume_generation_candidate = true" in statement:
+            if "resume_generation_candidate = true" in statement:
                 limit = int(values[0])
                 rows = sorted(
                     (
@@ -422,6 +440,10 @@ class FakeMySQLCursor:
                             "job_prospects"
                         ].values()
                         if row.get("resume_generation_candidate", False)
+                        and (
+                            "resume_generation_checked = true" not in statement
+                            or row.get("resume_generation_checked", False)
+                        )
                     ),
                     key=lambda row: (
                         -(row["match"] or 0),

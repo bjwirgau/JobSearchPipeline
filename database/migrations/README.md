@@ -19,3 +19,6 @@ The complete MySQL schema for new databases is defined in `database/schema.py`. 
   from job-source records and Greenhouse job-page JSON-LD.
 - `011_crawl_discovery_cursors.sql` persists archive-index pagination so each
   scheduled company crawl advances beyond the pages scanned by earlier runs.
+- `012_resume_generation_checked.sql` tracks which jobs completed resume
+  generation grading and leaves existing prospects unchecked for one-time
+  LLM evaluation.

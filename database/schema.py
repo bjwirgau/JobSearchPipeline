@@ -11,7 +11,7 @@ from utils.dates import to_utc_naive, utc_now
 from .connection import Database, MySQLCursor
 
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 SCHEMA_STATEMENTS = (
     """
@@ -41,6 +41,7 @@ SCHEMA_STATEMENTS = (
         url VARCHAR(2048) NOT NULL,
         posted_at DATETIME(6) NULL,
         job_data JSON NULL,
+        resume_generation_checked BOOLEAN NOT NULL DEFAULT FALSE,
         resume_generation_candidate BOOLEAN NOT NULL DEFAULT FALSE,
         resume_generation_model VARCHAR(64) NULL,
         created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -50,6 +51,9 @@ SCHEMA_STATEMENTS = (
         KEY idx_job_prospects_match (`match`),
         KEY idx_job_prospects_resume_candidate (
             resume_generation_candidate, `match`
+        ),
+        KEY idx_job_prospects_resume_unchecked (
+            resume_generation_checked, created_at, job_id
         ),
         CONSTRAINT ck_job_prospects_match
             CHECK (`match` IS NULL OR (`match` >= 0 AND `match` <= 1))
@@ -138,6 +142,8 @@ def initialize_schema(database: Database) -> None:
             _add_job_prospect_resume_generation(database, cursor)
         if current_version < 10:
             _add_job_prospect_posted_at(database, cursor)
+        if current_version < 12:
+            _add_job_prospect_resume_generation_checked(database, cursor)
         cursor.execute(
             """
             INSERT IGNORE INTO schema_migrations(version, applied_at)
@@ -316,4 +322,30 @@ def _add_job_prospect_posted_at(
     if not cursor.fetchone():
         cursor.execute(
             "ALTER TABLE job_prospects ADD COLUMN posted_at DATETIME(6) NULL"
+        )
+
+
+def _add_job_prospect_resume_generation_checked(
+    database: Database,
+    cursor: MySQLCursor,
+) -> None:
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME AS app_column_name
+        FROM information_schema.columns
+        WHERE table_schema = %s
+          AND table_name = 'job_prospects'
+          AND column_name = 'resume_generation_checked'
+        """,
+        (database.config.database,),
+    )
+    if not cursor.fetchone():
+        cursor.execute(
+            """
+            ALTER TABLE job_prospects
+            ADD COLUMN resume_generation_checked BOOLEAN NOT NULL DEFAULT FALSE,
+            ADD KEY idx_job_prospects_resume_unchecked (
+                resume_generation_checked, created_at, job_id
+            )
+            """
         )

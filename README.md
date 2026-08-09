@@ -100,8 +100,9 @@ Normalized jobs consistently include source identity, title, company, URL, locat
 
 MySQL stores the review-oriented projection in `job_prospects` with `job_id`,
 `match`, `title`, `company`, `location`, `salary`, `source`, `url`, `posted_at`,
-`job_data`, `resume_generation_candidate`, `resume_generation_model`,
-`created_at`, and `updated_at` columns. `job_data` retains the complete
+`job_data`, `resume_generation_checked`, `resume_generation_candidate`,
+`resume_generation_model`, `created_at`, and `updated_at` columns. `job_data`
+retains the complete
 normalized posting needed by the asynchronous matcher. The database assigns both UTC timestamps when a
 prospect is first stored, preserves `created_at`, and refreshes `updated_at`
 when the prospect or its match score changes. The match is nullable during
@@ -154,8 +155,9 @@ a code change. One API request is made for every distinct job being scored, so
 result count directly affects quota usage and latency. Every matcher run is
 hard-capped at 15 Gemini requests, and request starts are spaced four seconds
 apart to enforce 15 RPM. The setting can be lowered but values above 15 are
-rejected. Jobs beyond the batch remain stored with a null match and are picked
-up by a later matcher run. Search does not require a Gemini key; only
+rejected. Jobs beyond the batch remain stored with
+`resume_generation_checked = FALSE` and are picked up by a later matcher run.
+Search does not require a Gemini key; only
 `--match-prospects` does. Create a key in
 [Google AI Studio](https://aistudio.google.com/apikey), and see Google's
 [structured output documentation](https://ai.google.dev/gemini-api/docs/structured-output).
@@ -359,9 +361,9 @@ JOB_AGENT_GREENHOUSE_BOARD_LIMIT=25
 
 This schedule runs once per hour at four minutes past the hour. Adjust the
 absolute project path when the deployment is not located at `/opt/job-agent`.
-The separate matcher runs every minute, claims up to 15 stored prospects with a
-null match, spaces Gemini requests four seconds apart, and writes successful
-scores back to the same rows:
+The separate matcher runs every minute, claims up to 15 stored prospects where
+`resume_generation_checked` is false, spaces Gemini requests four seconds
+apart, and writes successful scores back to the same rows:
 
 ```cron
 JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN=15
@@ -424,8 +426,11 @@ python3 app.py --match-prospects --match-limit 15
 ```
 
 Each successful search refreshes stored posting data without erasing an
-existing score. The matcher only selects prospects with a null match; failed
-jobs remain null and are retried by a later minute-based run.
+existing score or eligibility-check flag. The matcher only selects prospects
+where `resume_generation_checked` is false and `job_data` is available. This
+includes legacy scores not graded by the current LLM workflow. A successful
+evaluation marks the flag true whether or not the role qualifies; failed jobs
+remain unchecked and are retried by a later minute-based run.
 
 `JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT` is the maximum number of URL-index
 records returned from the current archive page for each supported Greenhouse

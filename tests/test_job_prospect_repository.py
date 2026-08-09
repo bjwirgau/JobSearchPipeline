@@ -35,7 +35,10 @@ class JobProspectRepositoryTests(unittest.TestCase):
             posted_at=datetime(2026, 8, 1, 12, tzinfo=timezone.utc),
         )
         self.assertEqual(self.repository.save_jobs((job,)), 1)
-        self.assertEqual(self.repository.list_unmatched_jobs(), (job,))
+        self.assertEqual(
+            self.repository.list_unchecked_resume_generation_jobs(),
+            (job,),
+        )
         self.assertEqual(self.repository.matched_job_ids((job.job_id,)), frozenset())
         created = self.repository.get(job.job_id)
         self.assertIsNotNone(created)
@@ -61,7 +64,10 @@ class JobProspectRepositoryTests(unittest.TestCase):
             ),
         )
         self.assertEqual(self.repository.update_matches((match,)), 1)
-        self.assertEqual(self.repository.list_unmatched_jobs(), ())
+        self.assertEqual(
+            self.repository.list_unchecked_resume_generation_jobs(),
+            (),
+        )
         self.assertEqual(
             self.repository.matched_job_ids((job.job_id, "unknown-job")),
             frozenset({job.job_id}),
@@ -70,6 +76,7 @@ class JobProspectRepositoryTests(unittest.TestCase):
         expected = JobProspect.from_job(
             updated_job,
             match=0.875,
+            resume_generation_checked=True,
             resume_generation_candidate=True,
             resume_generation_model="gpt-5.4",
         )
@@ -128,8 +135,10 @@ class JobProspectRepositoryTests(unittest.TestCase):
 
         threshold_match = self.repository.get(jobs[0].job_id)
         qualifying_match = self.repository.get(jobs[1].job_id)
+        self.assertTrue(threshold_match.resume_generation_checked)
         self.assertFalse(threshold_match.resume_generation_candidate)
         self.assertIsNone(threshold_match.resume_generation_model)
+        self.assertTrue(qualifying_match.resume_generation_checked)
         self.assertTrue(qualifying_match.resume_generation_candidate)
         self.assertEqual(qualifying_match.resume_generation_model, "gpt-5.4")
         self.assertEqual(
@@ -155,10 +164,30 @@ class JobProspectRepositoryTests(unittest.TestCase):
         )
 
         stored = self.repository.get(scraped.job_id)
-        unmatched = self.repository.list_unmatched_jobs()
+        unchecked = self.repository.list_unchecked_resume_generation_jobs()
         self.assertEqual(stored.posted_at, posted_at)
-        self.assertEqual(unmatched[0].posted_at, posted_at)
-        self.assertEqual(unmatched[0].description, "Scraped description")
+        self.assertEqual(unchecked[0].posted_at, posted_at)
+        self.assertEqual(unchecked[0].description, "Scraped description")
+
+    def test_legacy_match_remains_eligible_until_explicitly_checked(self) -> None:
+        job = JobPosting(
+            source="sample",
+            external_id="legacy-job",
+            title="Software Engineer",
+            company="Example",
+            url="https://example.com/jobs/legacy",
+        )
+        self.repository.save_jobs((job,))
+        self.repository.save(JobProspect.from_job(job, match=0.8))
+
+        stored = self.repository.get(job.job_id)
+
+        self.assertAlmostEqual(stored.match, 0.8)
+        self.assertFalse(stored.resume_generation_checked)
+        self.assertEqual(
+            self.repository.list_unchecked_resume_generation_jobs(),
+            (job,),
+        )
 
     def test_serializes_database_timestamps(self) -> None:
         prospect = JobProspect(
@@ -193,7 +222,7 @@ class JobProspectRepositoryTests(unittest.TestCase):
             )
 
         with self.assertRaisesRegex(ValueError, "between 1 and 15"):
-            self.repository.list_unmatched_jobs(limit=16)
+            self.repository.list_unchecked_resume_generation_jobs(limit=16)
 
 
 if __name__ == "__main__":

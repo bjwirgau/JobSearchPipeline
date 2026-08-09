@@ -54,12 +54,16 @@ class DatabaseTests(unittest.TestCase):
         self.assertFalse(self.server.resume_candidate_foreign_key)
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {2, 11},
+            {2, 12},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)
         self.assertIn("job_data", self.server.job_prospect_columns)
         self.assertIn("posted_at", self.server.job_prospect_columns)
+        self.assertIn(
+            "resume_generation_checked",
+            self.server.job_prospect_columns,
+        )
         self.assertIn(
             "resume_generation_candidate",
             self.server.job_prospect_columns,
@@ -103,7 +107,7 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {3, 11},
+            {3, 12},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)
@@ -114,6 +118,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIsNotNone(migrated["updated_at"])
         self.assertIsNone(migrated["job_data"])
         self.assertIsNone(migrated["posted_at"])
+        self.assertFalse(migrated["resume_generation_checked"])
         self.assertFalse(migrated["resume_generation_candidate"])
         self.assertIsNone(migrated["resume_generation_model"])
 
@@ -184,8 +189,10 @@ class DatabaseTests(unittest.TestCase):
         qualifying = self.server.tables["job_prospects"]["qualifying"]
         threshold = self.server.tables["job_prospects"]["threshold"]
         self.assertTrue(qualifying["resume_generation_candidate"])
+        self.assertFalse(qualifying["resume_generation_checked"])
         self.assertEqual(qualifying["resume_generation_model"], "gpt-5.4")
         self.assertFalse(threshold["resume_generation_candidate"])
+        self.assertFalse(threshold["resume_generation_checked"])
         self.assertIsNone(threshold["resume_generation_model"])
         self.assertIn("posted_at", self.server.job_prospect_columns)
 

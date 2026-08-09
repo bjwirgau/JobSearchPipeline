@@ -149,7 +149,11 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(search_result.jobs, (job,))
         self.assertEqual(len(llm.prompts), 0)
 
-        match_result = await matching_workflow.run(candidate)
+        with self.assertLogs(
+            "workflows.job_matching_workflow",
+            level="INFO",
+        ) as logs:
+            match_result = await matching_workflow.run(candidate)
 
         prospect = self.repository.get(job.job_id)
         self.assertAlmostEqual(prospect.match, match_result.matches[0].score)
@@ -157,6 +161,24 @@ class SearchAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(prospect.resume_generation_model, "gpt-5.4")
         self.assertEqual(match_result.resume_candidates, (job,))
         self.assertEqual(len(llm.prompts), 1)
+        self.assertTrue(
+            any(
+                "Checking resume generation eligibility" in message
+                and f"job_id={job.job_id}" in message
+                and "title=Data Engineer" in message
+                and "company=Example" in message
+                and "threshold=85.00%" in message
+                for message in logs.output
+            )
+        )
+        self.assertTrue(
+            any(
+                "Resume generation eligibility checked" in message
+                and "score=88.00%" in message
+                and "qualified=True" in message
+                for message in logs.output
+            )
+        )
 
         repeated = await matching_workflow.run(candidate)
 

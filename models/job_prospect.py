@@ -27,6 +27,7 @@ class JobProspect:
     source: str
     url: str
     posted_at: datetime | None = None
+    resume_generation_checked: bool = False
     resume_generation_candidate: bool = False
     resume_generation_model: str | None = None
     created_at: datetime | None = None
@@ -60,6 +61,7 @@ class JobProspect:
         job: JobPosting,
         *,
         match: float | None = None,
+        resume_generation_checked: bool = False,
         resume_generation_candidate: bool = False,
         resume_generation_model: str | None = None,
     ) -> "JobProspect":
@@ -73,6 +75,7 @@ class JobProspect:
             source=job.source,
             url=job.url,
             posted_at=job.posted_at,
+            resume_generation_checked=resume_generation_checked,
             resume_generation_candidate=resume_generation_candidate,
             resume_generation_model=resume_generation_model,
         )
@@ -94,6 +97,9 @@ class JobProspect:
             source=str(row["source"]),
             url=str(row["url"]),
             posted_at=_timestamp(row.get("posted_at")),
+            resume_generation_checked=bool(
+                row.get("resume_generation_checked", False)
+            ),
             resume_generation_candidate=bool(
                 row.get("resume_generation_candidate", False)
             ),
@@ -117,6 +123,7 @@ class JobProspect:
             "source": self.source,
             "url": self.url,
             "posted_at": to_iso(self.posted_at),
+            "resume_generation_checked": self.resume_generation_checked,
             "resume_generation_candidate": self.resume_generation_candidate,
             "resume_generation_model": self.resume_generation_model,
             "created_at": to_iso(self.created_at),

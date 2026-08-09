@@ -31,10 +31,13 @@ class JobProspectRepository:
             """
             INSERT INTO job_prospects(
                 job_id, `match`, title, company, location, salary, source, url,
-                posted_at, job_data, resume_generation_candidate,
-                resume_generation_model
+                posted_at, job_data, resume_generation_checked,
+                resume_generation_candidate, resume_generation_model
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) AS incoming
+            VALUES (
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s
+            ) AS incoming
             ON DUPLICATE KEY UPDATE
                 `match` = COALESCE(incoming.`match`, job_prospects.`match`),
                 title = incoming.title,
@@ -45,6 +48,7 @@ class JobProspectRepository:
                 url = incoming.url,
                 posted_at = COALESCE(incoming.posted_at, job_prospects.posted_at),
                 job_data = COALESCE(incoming.job_data, job_prospects.job_data),
+                resume_generation_checked = incoming.resume_generation_checked,
                 resume_generation_candidate = incoming.resume_generation_candidate,
                 resume_generation_model = incoming.resume_generation_model,
                 updated_at = UTC_TIMESTAMP(6)
@@ -60,6 +64,7 @@ class JobProspectRepository:
                 prospect.url,
                 to_utc_naive(prospect.posted_at) if prospect.posted_at else None,
                 None,
+                prospect.resume_generation_checked,
                 prospect.resume_generation_candidate,
                 prospect.resume_generation_model,
             ),
@@ -73,10 +78,13 @@ class JobProspectRepository:
                     """
                     INSERT INTO job_prospects(
                         job_id, `match`, title, company, location, salary, source,
-                        url, posted_at, job_data, resume_generation_candidate,
-                        resume_generation_model
+                        url, posted_at, job_data, resume_generation_checked,
+                        resume_generation_candidate, resume_generation_model
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) AS incoming
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s
+                    ) AS incoming
                     ON DUPLICATE KEY UPDATE
                         `match` = COALESCE(incoming.`match`, job_prospects.`match`),
                         title = incoming.title,
@@ -108,13 +116,18 @@ class JobProspectRepository:
                         prospect.url,
                         to_utc_naive(job.posted_at) if job.posted_at else None,
                         json.dumps(job.to_dict(), ensure_ascii=False, sort_keys=True),
+                        prospect.resume_generation_checked,
                         prospect.resume_generation_candidate,
                         prospect.resume_generation_model,
                     ),
                 )
         return len(jobs)
 
-    def list_unmatched_jobs(self, *, limit: int = 15) -> tuple[JobPosting, ...]:
+    def list_unchecked_resume_generation_jobs(
+        self,
+        *,
+        limit: int = 15,
+    ) -> tuple[JobPosting, ...]:
         if not 1 <= limit <= 15:
             raise ValueError("limit must be between 1 and 15")
         with self._database.cursor() as cursor:
@@ -122,7 +135,7 @@ class JobProspectRepository:
                 """
                 SELECT job_data
                 FROM job_prospects
-                WHERE `match` IS NULL
+                WHERE resume_generation_checked = FALSE
                   AND job_data IS NOT NULL
                 ORDER BY created_at, job_id
                 LIMIT %s
@@ -159,6 +172,7 @@ class JobProspectRepository:
                     """
                     UPDATE job_prospects
                     SET `match` = %s,
+                        resume_generation_checked = TRUE,
                         resume_generation_candidate = %s,
                         resume_generation_model = %s,
                         updated_at = UTC_TIMESTAMP(6)
@@ -184,10 +198,12 @@ class JobProspectRepository:
             cursor.execute(
                 """
                 SELECT job_id, `match`, title, company, location, salary, source,
-                       url, posted_at, resume_generation_candidate,
-                       resume_generation_model, created_at, updated_at
+                       url, posted_at, resume_generation_checked,
+                       resume_generation_candidate, resume_generation_model,
+                       created_at, updated_at
                 FROM job_prospects
-                WHERE resume_generation_candidate = TRUE
+                WHERE resume_generation_checked = TRUE
+                  AND resume_generation_candidate = TRUE
                 ORDER BY `match` DESC, title, company
                 LIMIT %s
                 """,
@@ -219,8 +235,9 @@ class JobProspectRepository:
             cursor.execute(
                 """
                 SELECT job_id, `match`, title, company, location, salary, source, url,
-                       posted_at, resume_generation_candidate,
-                       resume_generation_model, created_at, updated_at
+                       posted_at, resume_generation_checked,
+                       resume_generation_candidate, resume_generation_model,
+                       created_at, updated_at
                 FROM job_prospects
                 WHERE job_id = %s
                 """,
@@ -236,8 +253,9 @@ class JobProspectRepository:
             cursor.execute(
                 """
                 SELECT job_id, `match`, title, company, location, salary, source, url,
-                       posted_at, resume_generation_candidate,
-                       resume_generation_model, created_at, updated_at
+                       posted_at, resume_generation_checked,
+                       resume_generation_candidate, resume_generation_model,
+                       created_at, updated_at
                 FROM job_prospects
                 ORDER BY (`match` IS NULL), `match` DESC, title, company
                 LIMIT %s

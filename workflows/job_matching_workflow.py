@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 
 from agents import MatchingAgent, ParserAgent
@@ -22,6 +23,7 @@ from services import NotificationService
 
 
 GEMINI_MAX_REQUESTS_PER_MINUTE = 15
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,13 +87,24 @@ class JobMatchingWorkflow:
         request_limit = min(requested_limit, self._max_requests_per_run)
         jobs = tuple(
             self._parser.parse(job)
-            for job in self._repository.list_unmatched_jobs(limit=request_limit)
+            for job in self._repository.list_unchecked_resume_generation_jobs(
+                limit=request_limit
+            )
         )
         run = WorkflowRun("job_matching").record(
             WorkflowStage.SCORE,
             WorkflowStatus.RUNNING,
-            f"Scoring up to {request_limit} unmatched jobs",
+            f"Grading up to {request_limit} unchecked jobs",
         )
+        for job in jobs:
+            LOGGER.info(
+                "Checking resume generation eligibility: "
+                "job_id=%s title=%s company=%s threshold=%.2f%%",
+                job.job_id,
+                job.title,
+                job.company,
+                self._resume_candidate_threshold * 100,
+            )
         outcomes = await asyncio.gather(
             *(
                 self._matching.score(candidate, job, resume_knowledge)
@@ -114,6 +127,15 @@ class JobMatchingWorkflow:
                 )
             else:
                 matches.append(outcome)
+                LOGGER.info(
+                    "Resume generation eligibility checked: "
+                    "job_id=%s title=%s company=%s score=%.2f%% qualified=%s",
+                    job.job_id,
+                    job.title,
+                    job.company,
+                    outcome.score * 100,
+                    outcome.score > self._resume_candidate_threshold,
+                )
         self._repository.update_matches(
             matches,
             resume_candidate_threshold=self._resume_candidate_threshold,
