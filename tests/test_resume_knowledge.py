@@ -102,7 +102,7 @@ class ResumeKnowledgeTests(unittest.TestCase):
         knowledge = ResumeKnowledgeService(path).load()
 
         self.assertEqual(candidate.candidate_id, knowledge.candidate_id)
-        self.assertEqual(candidate.phone, "")
+        self.assertEqual(candidate.phone, payload.get("phone", ""))
         self.assertEqual(candidate.skills, knowledge.skills)
         self.assertIn("Magento", knowledge.all_skills)
         self.assertEqual(knowledge.years_for("Magento"), 10)
