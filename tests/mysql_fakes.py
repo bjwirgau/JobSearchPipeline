@@ -446,14 +446,20 @@ class FakeMySQLCursor:
                 row = self._connection.tables["crawl_pages"].get(values[0])
                 self._rows = [dict(row)] if row else []
                 return
-            source, page_type, as_of = values
-            self._rows = [
-                {"page_url": row["page_url"]}
+            source, page_type, *remaining = values
+            rows = [
+                row
                 for row in self._connection.tables["crawl_pages"].values()
-                if row["source"] == source
-                and row["page_type"] == page_type
-                and row["next_crawl_at"] > as_of
+                if row["source"] == source and row["page_type"] == page_type
             ]
+            if remaining:
+                as_of = remaining[0]
+                rows = [row for row in rows if row["next_crawl_at"] > as_of]
+                self._rows = [{"page_url": row["page_url"]} for row in rows]
+            else:
+                self._rows = [
+                    dict(row) for row in sorted(rows, key=lambda row: row["page_url"])
+                ]
             return
         if statement.startswith("select payload_json from resume_knowledge"):
             self._select_payload("resume_knowledge", values[0])

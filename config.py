@@ -89,7 +89,7 @@ class Settings:
     company_crawler_scan_limit: int = 5_000
     company_crawler_concurrency: int = 5
     company_crawler_request_delay_seconds: float = 1.0
-    company_crawler_revisit_interval_hours: float = 168.0
+    company_crawler_failed_retry_hours: float = 24.0
     remote_country: str | None = None
     adzuna_app_id: str | None = None
     adzuna_app_key: str | None = None
@@ -162,10 +162,10 @@ class Settings:
                     "1",
                 )
             ),
-            company_crawler_revisit_interval_hours=float(
+            company_crawler_failed_retry_hours=float(
                 values.get(
-                    "JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS",
-                    "168",
+                    "JOB_AGENT_COMPANY_CRAWLER_FAILED_RETRY_HOURS",
+                    "24",
                 )
             ),
             remote_country=(
@@ -267,9 +267,9 @@ class Settings:
                 "JOB_AGENT_COMPANY_CRAWLER_REQUEST_DELAY_SECONDS must be "
                 "between 0 and 60"
             )
-        if not 0 < self.company_crawler_revisit_interval_hours <= 8_760:
+        if not 0 < self.company_crawler_failed_retry_hours <= 8_760:
             raise ValueError(
-                "JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS must be "
+                "JOB_AGENT_COMPANY_CRAWLER_FAILED_RETRY_HOURS must be "
                 "greater than 0 and at most 8760"
             )
         if self.remote_country is not None and (

@@ -75,6 +75,28 @@ class CrawlPageRepository:
             rows = cursor.fetchall()
         return frozenset(str(row["page_url"]) for row in rows)
 
+    def list_for_source(
+        self,
+        *,
+        source: str,
+        page_type: CrawlPageType,
+    ) -> tuple[CrawlPage, ...]:
+        with self._database.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT page_url, source, page_type, crawl_status,
+                       last_crawled_at, next_crawl_at, last_error,
+                       created_at, updated_at
+                FROM crawl_pages
+                WHERE source = %s
+                  AND page_type = %s
+                ORDER BY page_url
+                """,
+                (source.casefold(), page_type.value),
+            )
+            rows = cursor.fetchall()
+        return tuple(CrawlPage.from_row(row) for row in rows)
+
     def get(self, page_url: str) -> CrawlPage | None:
         with self._database.cursor() as cursor:
             cursor.execute(

@@ -114,8 +114,8 @@ def build_container(
         crawl_pages=crawl_pages,
         enabled=settings.company_crawler_enabled,
         concurrency=settings.company_crawler_concurrency,
-        revisit_after=timedelta(
-            hours=settings.company_crawler_revisit_interval_hours
+        failed_retry_after=timedelta(
+            hours=settings.company_crawler_failed_retry_hours
         ),
     )
 
@@ -597,11 +597,14 @@ async def _run_company_crawl(
         return 1
 
     print(
-        f"Discovered {result.discovered_count} candidate boards; "
+        f"Discovered {result.discovered_count} index candidates; "
+        f"new {result.new_count}; "
+        f"known {result.known_count}; "
+        f"retry ready {result.retry_ready_count}; "
+        f"retry cooldown {result.retry_deferred_count}; "
         f"checked {result.checked_count}; "
-        f"skipped recent {result.skipped_recent_count}; "
+        f"retried {result.retried_count}; "
         f"inserted {result.inserted_count}; "
-        f"updated {result.updated_count}; "
         f"failed {len(result.failures)}."
     )
     print(_format_company_grid(result.companies))

@@ -124,6 +124,7 @@ class GreenhouseCdxDiscovery:
                 "Common Crawl did not return Greenhouse candidates"
                 f"{failure_detail}"
             ) from (failures[-1][1] if failures else None)
+        LOGGER.info(f"Candidates Found: {candidates}")
         return _sorted_candidates(candidates)
 
     async def _discover_from_internet_archive(

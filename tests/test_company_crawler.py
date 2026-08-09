@@ -428,46 +428,145 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
         result = await crawler.crawl(limit=3)
 
         self.assertEqual(result.discovered_count, 3)
-        self.assertEqual(result.checked_count, 3)
-        self.assertEqual(result.skipped_recent_count, 0)
+        self.assertEqual(result.new_count, 2)
+        self.assertEqual(result.known_count, 1)
+        self.assertEqual(result.checked_count, 2)
+        self.assertEqual(result.retry_ready_count, 0)
+        self.assertEqual(result.retry_deferred_count, 0)
+        self.assertEqual(result.retried_count, 0)
         self.assertEqual(result.inserted_count, 1)
-        self.assertEqual(result.updated_count, 1)
         self.assertEqual(len(result.failures), 1)
         self.assertEqual(result.failures[0].board_token, "broken")
         self.assertEqual(len(self.repository.list_all()), 2)
-        self.assertEqual(len(boards.calls), 3)
+        self.assertEqual(len(boards.calls), 2)
+        self.assertNotIn("existing", boards.calls)
         failed_page = self.crawl_pages.get(
             "https://job-boards.greenhouse.io/broken"
         )
         self.assertEqual(failed_page.crawl_status.value, "failed")
 
-    async def test_recent_pages_are_skipped_until_revisit_time(self) -> None:
+    async def test_successful_known_board_is_never_revisited(self) -> None:
         now = [datetime(2026, 8, 6, 12, tzinfo=timezone.utc)]
         candidate = GreenhouseBoardCandidate(
             "example",
             "https://job-boards.greenhouse.io/example",
         )
         boards = StaticBoardLookup()
-        crawler = GreenhouseCompanyCrawler(
+        initial_crawler = GreenhouseCompanyCrawler(
             discovery=StaticDiscovery((candidate,)),
             boards=boards,
             repository=self.repository,
             crawl_pages=self.crawl_pages,
             enabled=True,
-            revisit_after=timedelta(hours=24),
+            failed_retry_after=timedelta(days=7),
+            clock=lambda: now[0],
+        )
+        retry_crawler = GreenhouseCompanyCrawler(
+            discovery=StaticDiscovery((candidate,)),
+            boards=boards,
+            repository=self.repository,
+            crawl_pages=self.crawl_pages,
+            enabled=True,
+            failed_retry_after=timedelta(hours=24),
             clock=lambda: now[0],
         )
 
-        first = await crawler.crawl()
-        second = await crawler.crawl()
+        first = await initial_crawler.crawl()
+        second = await retry_crawler.crawl()
         now[0] += timedelta(hours=25)
-        third = await crawler.crawl()
+        third = await retry_crawler.crawl()
 
         self.assertEqual(first.checked_count, 1)
         self.assertEqual(second.checked_count, 0)
-        self.assertEqual(second.skipped_recent_count, 1)
+        self.assertEqual(second.known_count, 1)
+        self.assertEqual(third.checked_count, 0)
+        self.assertEqual(third.known_count, 1)
+        self.assertEqual(boards.calls, ["example"])
+
+    async def test_failed_board_retries_after_shorter_cooldown(self) -> None:
+        now = [datetime(2026, 8, 6, 12, tzinfo=timezone.utc)]
+        candidate = GreenhouseBoardCandidate(
+            "broken",
+            "https://job-boards.greenhouse.io/broken",
+        )
+        boards = StaticBoardLookup()
+        initial_crawler = GreenhouseCompanyCrawler(
+            discovery=StaticDiscovery((candidate,)),
+            boards=boards,
+            repository=self.repository,
+            crawl_pages=self.crawl_pages,
+            enabled=True,
+            failed_retry_after=timedelta(days=7),
+            clock=lambda: now[0],
+        )
+        retry_crawler = GreenhouseCompanyCrawler(
+            discovery=StaticDiscovery((candidate,)),
+            boards=boards,
+            repository=self.repository,
+            crawl_pages=self.crawl_pages,
+            enabled=True,
+            failed_retry_after=timedelta(hours=24),
+            clock=lambda: now[0],
+        )
+
+        first = await initial_crawler.crawl()
+        second = await retry_crawler.crawl()
+        rescheduled = self.crawl_pages.get(candidate.company_url)
+        now[0] += timedelta(hours=25)
+        third = await retry_crawler.crawl()
+
+        self.assertEqual(first.new_count, 1)
+        self.assertEqual(first.checked_count, 1)
+        self.assertEqual(second.checked_count, 0)
+        self.assertEqual(second.retry_deferred_count, 1)
+        self.assertEqual(
+            rescheduled.next_crawl_at,
+            datetime(2026, 8, 7, 12, tzinfo=timezone.utc),
+        )
+        self.assertEqual(third.retry_ready_count, 1)
         self.assertEqual(third.checked_count, 1)
-        self.assertEqual(boards.calls, ["example", "example"])
+        self.assertEqual(third.retried_count, 1)
+        self.assertEqual(boards.calls, ["broken", "broken"])
+
+    async def test_new_boards_are_checked_before_ready_retries(self) -> None:
+        now = [datetime(2026, 8, 6, 12, tzinfo=timezone.utc)]
+        broken = GreenhouseBoardCandidate(
+            "broken",
+            "https://job-boards.greenhouse.io/broken",
+        )
+        new = GreenhouseBoardCandidate(
+            "new",
+            "https://job-boards.greenhouse.io/new",
+        )
+        boards = StaticBoardLookup()
+        first_crawler = GreenhouseCompanyCrawler(
+            discovery=StaticDiscovery((broken,)),
+            boards=boards,
+            repository=self.repository,
+            crawl_pages=self.crawl_pages,
+            enabled=True,
+            failed_retry_after=timedelta(hours=24),
+            clock=lambda: now[0],
+        )
+        await first_crawler.crawl()
+        now[0] += timedelta(hours=25)
+        second_crawler = GreenhouseCompanyCrawler(
+            discovery=StaticDiscovery((new,)),
+            boards=boards,
+            repository=self.repository,
+            crawl_pages=self.crawl_pages,
+            enabled=True,
+            failed_retry_after=timedelta(hours=24),
+            clock=lambda: now[0],
+        )
+
+        result = await second_crawler.crawl(limit=1)
+
+        self.assertEqual(result.new_count, 1)
+        self.assertEqual(result.retry_ready_count, 1)
+        self.assertEqual(result.checked_count, 1)
+        self.assertEqual(result.retried_count, 0)
+        self.assertEqual(boards.calls, ["broken", "new"])
 
     async def test_crawler_uses_stored_us_boards_when_discovery_is_down(self) -> None:
         existing = CompanyProspect.from_board(
@@ -488,15 +587,52 @@ class CompanyCrawlerTests(unittest.IsolatedAsyncioTestCase):
         with self.assertLogs("agents.company_crawler", level="WARNING"):
             result = await crawler.crawl()
 
-        self.assertEqual(result.discovered_count, 1)
-        self.assertEqual(result.checked_count, 1)
-        self.assertEqual(result.updated_count, 1)
-        self.assertEqual(boards.calls, ["existing"])
+        self.assertEqual(result.discovered_count, 0)
+        self.assertEqual(result.checked_count, 0)
+        self.assertEqual(result.inserted_count, 0)
+        self.assertEqual(boards.calls, [])
         self.assertIsNotNone(result.discovery_warning)
         self.assertIn(
-            "using 1 stored US Greenhouse boards",
+            "successful known boards will not be revisited",
             result.discovery_warning or "",
         )
+
+    async def test_crawler_retries_stored_failure_when_discovery_is_down(self) -> None:
+        now = [datetime(2026, 8, 6, 12, tzinfo=timezone.utc)]
+        broken = GreenhouseBoardCandidate(
+            "broken",
+            "https://job-boards.greenhouse.io/broken",
+        )
+        boards = StaticBoardLookup()
+        crawler = GreenhouseCompanyCrawler(
+            discovery=StaticDiscovery((broken,)),
+            boards=boards,
+            repository=self.repository,
+            crawl_pages=self.crawl_pages,
+            enabled=True,
+            failed_retry_after=timedelta(hours=24),
+            clock=lambda: now[0],
+        )
+        await crawler.crawl()
+        now[0] += timedelta(hours=25)
+        retry_crawler = GreenhouseCompanyCrawler(
+            discovery=FailingDiscovery(),
+            boards=boards,
+            repository=self.repository,
+            crawl_pages=self.crawl_pages,
+            enabled=True,
+            failed_retry_after=timedelta(hours=24),
+            clock=lambda: now[0],
+        )
+
+        with self.assertLogs("agents.company_crawler", level="WARNING"):
+            result = await retry_crawler.crawl()
+
+        self.assertEqual(result.discovered_count, 0)
+        self.assertEqual(result.retry_ready_count, 1)
+        self.assertEqual(result.checked_count, 1)
+        self.assertEqual(result.retried_count, 1)
+        self.assertEqual(boards.calls, ["broken", "broken"])
 
     async def test_crawler_fails_when_discovery_and_inventory_are_empty(self) -> None:
         crawler = GreenhouseCompanyCrawler(

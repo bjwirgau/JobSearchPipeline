@@ -56,7 +56,7 @@ class CountryEligibilityTests(unittest.TestCase):
                 "JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT": "7500",
                 "JOB_AGENT_COMPANY_CRAWLER_CONCURRENCY": "4",
                 "JOB_AGENT_COMPANY_CRAWLER_REQUEST_DELAY_SECONDS": "2.5",
-                "JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS": "72",
+                "JOB_AGENT_COMPANY_CRAWLER_FAILED_RETRY_HOURS": "12",
             }
         )
 
@@ -64,14 +64,14 @@ class CountryEligibilityTests(unittest.TestCase):
         self.assertEqual(settings.company_crawler_scan_limit, 7500)
         self.assertEqual(settings.company_crawler_concurrency, 4)
         self.assertEqual(settings.company_crawler_request_delay_seconds, 2.5)
-        self.assertEqual(settings.company_crawler_revisit_interval_hours, 72)
+        self.assertEqual(settings.company_crawler_failed_retry_hours, 12)
         with self.assertRaisesRegex(ValueError, "between 1 and 20"):
             Settings.from_env(
                 {"JOB_AGENT_COMPANY_CRAWLER_CONCURRENCY": "21"}
             )
-        with self.assertRaisesRegex(ValueError, "REVISIT_INTERVAL_HOURS"):
+        with self.assertRaisesRegex(ValueError, "FAILED_RETRY_HOURS"):
             Settings.from_env(
-                {"JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS": "0"}
+                {"JOB_AGENT_COMPANY_CRAWLER_FAILED_RETRY_HOURS": "0"}
             )
 
     def test_gemini_matching_settings_are_validated(self) -> None:

@@ -281,16 +281,19 @@ Greenhouse board URLs. If that public index is unavailable, discovery falls
 back to the latest Common Crawl URL index. It extracts and deduplicates board
 tokens, then validates each candidate through Greenhouse's public Job Board
 API. Greenhouse returns the organization name for a valid board; the crawler
-then inserts or updates that company in `company_prospects`.
+then inserts that company in `company_prospects`. Successful known boards are
+excluded from future discovery runs. Failed validations use a separate retry
+queue and are retried after a shorter configurable cooldown.
 
 The crawler is disabled by default. Enable it in `.env`:
 
 ```env
 JOB_AGENT_COMPANY_CRAWLER_ENABLED=true
 JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT=5000
+JOB_AGENT_COMPANY_CRAWLER_LIMIT=100
 JOB_AGENT_COMPANY_CRAWLER_CONCURRENCY=5
 JOB_AGENT_COMPANY_CRAWLER_REQUEST_DELAY_SECONDS=1
-JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS=168
+JOB_AGENT_COMPANY_CRAWLER_FAILED_RETRY_HOURS=24
 ```
 
 Run one crawl with:
@@ -405,9 +408,14 @@ jobs remain null and are retried by a later minute-based run.
 `JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT` is the maximum number of URL-index
 records inspected per supported Greenhouse hostname. `--crawl-limit` caps the
 number of unique boards validated in one run. Previously unseen boards are
-validated first, allowing repeated runs to progress through the discovery set.
-The terminal output summarizes discovered, checked, inserted, updated, and
-failed boards and prints every successfully validated company in a grid.
+always validated before failed retries, allowing repeated runs to progress
+through the discovery set. The terminal output distinguishes raw index
+candidates, new boards, known boards, ready and deferred retries, checked
+boards, insertions, and failures. It prints every successfully validated
+company in a grid.
+
+The scheduled runner reads `JOB_AGENT_COMPANY_CRAWLER_LIMIT` for its
+`--crawl-limit` value. This is separate from the larger archive scan limit.
 
 `JOB_AGENT_COMPANY_CRAWLER_REQUEST_DELAY_SECONDS` sets the minimum idle interval
 between every outbound crawler request. The interval applies globally to archive
@@ -416,22 +424,29 @@ checks. Requests are serialized even though board-validation tasks may be queued
 concurrently. The default is one second; increase it if a gateway starts
 rejecting requests.
 
-`JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS` controls when a previously
-checked board becomes eligible again. The default `168` is seven days. Both
-successful and failed checks are recorded, so rerunning the command during the
-cooldown skips those board API calls. Once `next_crawl_at` is reached, the board
-can be checked and its company data refreshed again. Archive indexes are still
-polled each run because that small discovery step is required to find newly
-listed board URLs.
+`JOB_AGENT_COMPANY_CRAWLER_FAILED_RETRY_HOURS` controls when an unsuccessful
+board validation becomes eligible for retry. The default is `24` hours.
+Successful boards are recorded as known and are never revisited by the
+discovery crawler. Failed boards are retried from the stored queue even when
+they are absent from the latest archive result or public index discovery is
+temporarily unavailable. Existing failed rows are automatically rescheduled
+from their last attempt when this setting changes. Archive indexes are still
+polled each run because that discovery step is required to find newly listed
+board URLs.
+
+The former `JOB_AGENT_COMPANY_CRAWLER_REVISIT_INTERVAL_HOURS` setting is no
+longer used. Replace it with `JOB_AGENT_COMPANY_CRAWLER_FAILED_RETRY_HOURS` when
+upgrading an existing deployment.
 
 The crawler reads URL indexes only; it does not download archived page content.
 CDX requests are sequential and delayed because public indexes are rate-limited.
 Archive requests use the smallest CDX page size and retry once after an HTTP
 failure. Common Crawl requests are attempted up to three times; failure on one
 hostname does not discard candidates from other hosts. If both public indexes
-are temporarily unavailable, the crawler logs a warning and revisits canonical
-US boards already stored in `company_prospects`. It still fails when there are
-no stored boards, because no safe discovery source is available in that case.
+are temporarily unavailable, the crawler logs a warning and processes only
+stored failed validations whose retry cooldown has expired. It does not revisit
+successful companies. The run fails only when discovery is unavailable and
+there is no stored company or crawl history from which to continue safely.
 Keep the delay enabled, avoid concurrent crawler runs, and use Common Crawl's
 bulk URL Index instead if this grows into a large-scale data collection
 workload. Archive indexes can be incomplete or stale, so every token is verified
