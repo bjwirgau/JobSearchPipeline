@@ -1,59 +1,232 @@
 {
   "schema_version": 1,
-  "candidate_id": "replace-me",
+  "candidate_id": "brandon-wirgau",
   "full_name": "Brandon Wirgau",
   "email": "brandonjoelwirgau@gmail.com",
   "location": "El Paso, TX",
-  "summary": "Senior software engineer with more than 10 years of experience building and supporting scalable e-commerce and full-stack applications. Extensive expertise in Adobe Commerce, Magento, PHP, MySQL, REST APIs, and JavaScript frameworks, including React and Angular. Experienced in system integrations, performance optimization, cloud infrastructure, CI/CD, security, and technical leadership. Currently pursuing a master’s degree in Applied Artificial Intelligence.",
+  "summary": "Senior Software Engineer with 10+ years of experience building scalable e-commerce and web applications using Adobe Commerce (Magento), PHP frameworks such as Laravel, and modern JavaScript frameworks including React and Next.js. Proven track record of delivering high-performance solutions, improving conversion rates, and leading cross-functional initiatives. Experienced in system architecture, API integrations, DevOps, CI/CD, cloud infrastructure, security, database optimization, and technical leadership. Currently pursuing a Master of Science in Applied Artificial Intelligence.",
   "skills": [
     "Adobe Commerce (Magento)",
     "PHP",
     "Laravel",
     "React",
+    "Next.js",
     "JavaScript",
     "TypeScript",
+    "Angular",
+    "Vue.js",
+    "KnockoutJS",
     "Python",
-    "Java",
     "MySQL",
+    "HTML",
+    "CSS",
+    "LESS",
     "REST APIs",
-    "GraphQL",
+    "XML",
     "AWS",
+    "AWS EC2",
     "Docker",
     "Git",
-    "CI/CD",
+    "GitHub",
+    "Composer",
+    "Elasticsearch",
+    "Varnish",
+    "NGINX",
     "Linux",
+    "PHPUnit",
+    "Jenkins",
+    "Bitbucket Pipelines",
+    "CI/CD",
+    "DevOps",
+    "Magento PageBuilder",
+    "Adobe Commerce Cloud",
+    "System Architecture",
     "System Integration",
     "Performance Optimization",
-    "LangGraph",
-    "MLflow"
+    "Database Optimization",
+    "Security",
+    "Agile Development",
+    "Technical Leadership",
+    "Code Review",
+    "Technical Documentation",
+    "LLM-Assisted Development",
+    "Claude Code",
+    "GitHub Copilot"
   ],
   "years_experience": 10,
   "years": {
+    "Software Engineering": 10,
     "PHP": 10,
     "Magento": 10,
+    "MySQL": 10,
+    "JavaScript": 10,
+    "Git": 10,
+    "CI/CD": 8,
+    "Docker": 5,
+    "AWS": 2,
     "React": 4,
+    "Laravel": 3,
+    "Python": 2,
     "Java": 2
   },
   "industries": [
-    "Ecommerce",
-    "Retail"
+    "E-commerce",
+    "Retail",
+    "Digital Commerce",
+    "Agency",
+    "Restaurant Technology"
   ],
-  "roles": [],
-  "achievements": [],
+  "roles": [
+    {
+      "title": "Lead Magento Engineer",
+      "company": "Crazy Crab",
+      "location": "El Paso, TX",
+      "start_date": "2025-08",
+      "end_date": "Present",
+      "responsibilities": [
+        "Developed a full-stack e-commerce platform using Magento, PHP, JavaScript, LESS, MySQL, and Docker.",
+        "Designed scalable system architecture focused on application performance, maintainability, and reliability.",
+        "Led requirements gathering with cross-functional stakeholders and translated business requirements into technical specifications.",
+        "Mentored and coordinated development tasks with another engineer through Agile workflows and pull request reviews.",
+        "Used Claude Code and GitHub Copilot to accelerate development while reviewing generated code for performance, security, maintainability, and accuracy.",
+        "Managed Magento platform enhancements, integrations, and production support.",
+        "Built Magento PageBuilder content experiences that enabled non-technical users to manage website content."
+      ]
+    },
+    {
+      "title": "Magento Engineer (Contract)",
+      "company": "Insight Global",
+      "location": "Remote, US",
+      "start_date": "2025-03",
+      "end_date": "2025-08",
+      "responsibilities": [
+        "Improved Lighthouse scores into the mid-90s by reducing layout shift and optimizing JavaScript.",
+        "Reduced backend load times to under one second by installing and configuring Varnish.",
+        "Resolved a checkout timeout caused by invalid shipping API credentials, doubling conversion rate.",
+        "Managed AWS EC2 instances and access configuration.",
+        "Migrated manual deployments to Bitbucket Pipelines for staging and production.",
+        "Refactored a PHP product export module using single responsibility principles to improve maintainability."
+      ]
+    },
+    {
+      "title": "Senior Magento Engineer",
+      "company": "Merkle",
+      "location": "Remote, US",
+      "start_date": "2022-03",
+      "end_date": "2024-09",
+      "responsibilities": [
+        "Led a cross-functional initiative integrating a middleware REST API with Magento checkout functionality.",
+        "Customized bundle products and frontend components using JavaScript, KnockoutJS, and CSS.",
+        "Developed product detail and product listing features integrating PIM product data and Sitecore CMS content.",
+        "Deployed staging and production environments using Adobe Commerce Cloud and CLI tooling.",
+        "Mentored junior developers through onboarding, environment troubleshooting, pull request reviews, and technical guidance.",
+        "Created technical documentation covering cross-functional applications, development environments, recurring issues, and core features.",
+        "Supported enterprise clients including Nestle and Balfour.",
+        "Diagnosed and resolved production issues to reduce downtime and improve reliability."
+      ]
+    },
+    {
+      "title": "Magento Engineer",
+      "company": "DEG Digital",
+      "location": "Overland Park, KS",
+      "start_date": "2015-08",
+      "end_date": "2022-03",
+      "responsibilities": [
+        "Developed scalable Magento solutions using established software design patterns and MVC architecture.",
+        "Supported up to five clients concurrently, delivering bug fixes, security updates, and feature enhancements.",
+        "Investigated and remediated a client-side security breach involving malicious credit card scraping scripts.",
+        "Optimized relational database queries for Magento re-indexing and order processing.",
+        "Implemented automated testing using PHPUnit.",
+        "Worked in Agile development environments using Git branching, code review, estimation, and release management.",
+        "Implemented DevOps and CI/CD workflows using Jenkins and Bitbucket Pipelines.",
+        "Supported Magento integrations with CRM and ERP platforms for order, inventory, and customer synchronization."
+      ]
+    }
+  ],
+  "achievements": [
+    {
+      "category": "Performance",
+      "description": "Improved Lighthouse performance scores from low scores into the mid-90s through JavaScript optimization and layout shift reduction."
+    },
+    {
+      "category": "Performance",
+      "description": "Reduced backend page load times to under one second by installing and configuring Varnish caching."
+    },
+    {
+      "category": "Conversion Optimization",
+      "description": "Resolved a checkout timeout caused by invalid shipping API credentials, resulting in approximately double the conversion rate."
+    },
+    {
+      "category": "CI/CD",
+      "description": "Migrated manual deployments to Bitbucket Pipelines, improving deployment speed by approximately 50% and increasing staging and production deployment reliability."
+    },
+    {
+      "category": "Database Optimization",
+      "description": "Optimized relational database queries used for Magento re-indexing and order processing, improving performance by approximately 30% and reducing errors."
+    },
+    {
+      "category": "Enterprise E-commerce",
+      "description": "Supported large enterprise clients including Nestle and Balfour with annual revenue of at least $100 million."
+    },
+    {
+      "category": "API Integration",
+      "description": "Led development of a Magento checkout integration with a middleware REST API that enabled students to locate and apply available funds toward graduation ring purchases."
+    },
+    {
+      "category": "Security",
+      "description": "Conducted post-incident analysis and remediation following a client-side breach involving malicious scripts that scraped credit card information."
+    },
+    {
+      "category": "Leadership",
+      "description": "Mentored developers through onboarding, pull request reviews, environment troubleshooting, technical guidance, and Agile development workflows."
+    },
+    {
+      "category": "AI-Assisted Development",
+      "description": "Used Claude Code and GitHub Copilot to accelerate software development while reviewing AI-generated code for accuracy, security, performance, maintainability, and production viability."
+    }
+  ],
   "certifications": [
-    "Adobe Commerce "
+    {
+      "name": "Adobe Certified Expert - Adobe Commerce Developer",
+      "issued": "2023-07",
+      "status": "Current"
+    },
+    {
+      "name": "Amazon Web Services Cloud Practitioner",
+      "issued": "2026-03",
+      "status": "Current"
+    }
   ],
   "education": [
-    "Bachelor of Science in Computer Engineering",
-    "Master of Science in Applied Artificial Intelligence"
+    {
+      "institution": "University of San Diego",
+      "location": "San Diego, CA",
+      "degree": "Master of Science",
+      "field": "Applied Artificial Intelligence",
+      "status": "In Progress"
+    },
+    {
+      "institution": "Wichita State University",
+      "location": "Wichita, KS",
+      "degree": "Bachelor of Science",
+      "field": "Computer Engineering"
+    }
   ],
   "desired_titles": [
-    "Software Engineer"
+    "Senior Software Engineer",
+    "Software Engineer",
+    "Senior Magento Engineer",
+    "Adobe Commerce Developer",
+    "Magento Developer",
+    "PHP Developer",
+    "Full Stack Software Engineer",
+    "Backend Software Engineer"
   ],
   "desired_locations": [
+    "Remote, US",
     "El Paso, TX"
   ],
   "remote_preference": "remote",
   "remote_country": "US",
-  "resume_path": null
+  "resume_path": "BrandonWirgau_SeniorSoftwareEngineer_Resume.pdf"
 }
