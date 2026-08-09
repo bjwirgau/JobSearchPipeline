@@ -17,6 +17,7 @@ from agents import (
     GreenhouseCompanyCrawler,
     MatchingAgent,
     ParserAgent,
+    ResumeGenerationAgent,
     SearchAgent,
     SearchQueryBuilder,
 )
@@ -39,13 +40,20 @@ from repositories import (
 )
 from services import (
     CompanyDiscoveryError,
+    DisabledResumeGenerator,
     DisabledLLMService,
+    DocumentService,
     GeminiConfig,
     GeminiLLMService,
     GreenhouseCdxDiscovery,
     GreenhousePublicBoardLookup,
     LoggingNotificationService,
+    MissingOpenAIDependencyError,
+    OpenAIResumeConfig,
+    OpenAIResumeGenerator,
     RequestsHttpClient,
+    ResumeGenerationNotConfiguredError,
+    ResumeGenerationResponseError,
     ResumeKnowledgeError,
     ResumeKnowledgeService,
     ThrottledHttpClient,
@@ -54,7 +62,14 @@ from services import (
 from services.http_service import HttpRequestError
 from services.job_sources import GreenhouseBoard, LinkedInJobSource
 from utils.logging import configure_logging
-from workflows import JobMatchingWorkflow, JobSearchWorkflow
+from workflows import (
+    JobMatchingWorkflow,
+    JobSearchWorkflow,
+    ResumeGenerationJobDataError,
+    ResumeGenerationJobNotFoundError,
+    ResumeGenerationNotEligibleError,
+    ResumeGenerationWorkflow,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +84,7 @@ class JobAgentContainer:
     resume_knowledge_service: ResumeKnowledgeService
     job_search_workflow: JobSearchWorkflow
     job_matching_workflow: JobMatchingWorkflow
+    resume_generation_workflow: ResumeGenerationWorkflow
 
 
 def build_container(
@@ -183,6 +199,24 @@ def build_container(
         prompt_template=settings.matching_prompt_path.read_text(encoding="utf-8"),
         concurrency=settings.matching_concurrency,
     )
+    resume_generator = (
+        OpenAIResumeGenerator(
+            OpenAIResumeConfig(
+                api_key=settings.openai_api_key,
+                timeout_seconds=settings.resume_generation_timeout_seconds,
+                max_output_tokens=settings.resume_generation_max_output_tokens,
+            )
+        )
+        if settings.openai_api_key
+        else DisabledResumeGenerator()
+    )
+    resume_generation_agent = ResumeGenerationAgent(
+        generator=resume_generator,
+        documents=DocumentService(settings.generated_documents_dir),
+        prompt_template=settings.resume_generation_prompt_path.read_text(
+            encoding="utf-8"
+        ),
+    )
     return JobAgentContainer(
         settings=settings,
         database=database,
@@ -205,6 +239,10 @@ def build_container(
             resume_generation_model=settings.resume_generation_model,
             max_requests_per_run=settings.matching_max_requests_per_run,
         ),
+        resume_generation_workflow=ResumeGenerationWorkflow(
+            repository=job_prospects,
+            agent=resume_generation_agent,
+        ),
     )
 
 
@@ -219,6 +257,11 @@ def _arguments(
         "--match-prospects",
         action="store_true",
         help="score stored job prospects that do not have a match",
+    )
+    parser.add_argument(
+        "--generate-resume",
+        metavar="JOB_ID",
+        help="generate one resume for a job marked as a resume candidate",
     )
     parser.add_argument(
         "--match-limit",
@@ -294,12 +337,14 @@ def _arguments(
         (
             arguments.search,
             arguments.match_prospects,
+            bool(arguments.generate_resume),
             arguments.crawl_greenhouse_companies,
         )
     )
     if selected_commands > 1:
         parser.error(
-            "--search, --match-prospects, and --crawl-greenhouse-companies "
+            "--search, --match-prospects, --generate-resume, and "
+            "--crawl-greenhouse-companies "
             "cannot be combined"
         )
     if not 1 <= arguments.match_limit <= 15:
@@ -587,6 +632,45 @@ async def _run_prospect_matching(
     return 0 if result.matches or not result.failures else 1
 
 
+async def _run_resume_generation(
+    container: JobAgentContainer,
+    *,
+    job_id: str,
+) -> int:
+    if not container.settings.openai_api_key:
+        logging.getLogger(__name__).error(
+            "Resume generation requires OPENAI_API_KEY to be configured"
+        )
+        return 1
+    try:
+        candidate = _load_candidate(container.settings.candidate_profile_path)
+        knowledge = container.resume_knowledge_service.load()
+        result = await container.resume_generation_workflow.run(
+            job_id=job_id,
+            candidate=candidate,
+            knowledge=knowledge,
+        )
+    except (
+        ResumeGenerationJobDataError,
+        ResumeGenerationJobNotFoundError,
+        ResumeGenerationNotEligibleError,
+        ResumeGenerationNotConfiguredError,
+        ResumeGenerationResponseError,
+        ResumeKnowledgeError,
+        MissingOpenAIDependencyError,
+        TypeError,
+        ValueError,
+    ) as error:
+        logging.getLogger(__name__).error("Resume generation failed: %s", error)
+        return 1
+
+    print(f"Generated resume for {result.job.title} at {result.job.company}.")
+    print(f"Job ID: {result.job.job_id}")
+    print(f"Model: {result.model}")
+    print(f"Saved: {result.artifact.path}")
+    return 0
+
+
 async def _run_company_crawl(
     container: JobAgentContainer,
     *,
@@ -662,6 +746,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             _run_prospect_matching(
                 container,
                 limit=arguments.match_limit,
+            )
+        )
+    if arguments.generate_resume:
+        return asyncio.run(
+            _run_resume_generation(
+                container,
+                job_id=arguments.generate_resume,
             )
         )
     if arguments.search:

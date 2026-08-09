@@ -246,6 +246,26 @@ class JobProspectRepository:
             row = cursor.fetchone()
         return JobProspect.from_row(row) if row else None
 
+    def get_job_posting(self, job_id: str) -> JobPosting | None:
+        with self._database.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT job_id, job_data
+                FROM job_prospects
+                WHERE job_id = %s
+                """,
+                (job_id,),
+            )
+            row = cursor.fetchone()
+        if not row or row.get("job_data") is None:
+            return None
+        payload = row["job_data"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        if not isinstance(payload, dict):
+            raise TypeError("job_data must contain a JSON object")
+        return JobPosting.from_dict(payload)
+
     def list_ranked(self, *, limit: int = 100) -> tuple[JobProspect, ...]:
         if limit <= 0:
             raise ValueError("limit must be greater than zero")

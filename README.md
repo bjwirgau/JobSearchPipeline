@@ -172,11 +172,55 @@ After Gemini matching, a score strictly greater than
 `JOB_AGENT_RESUME_CANDIDATE_THRESHOLD` marks the stored job as a resume
 generation candidate. The intended generation model is stored alongside the
 job and defaults to the official `gpt-5.4` model ID. Schema migration 9 also
-backfills existing matches above 85%. This stage only creates the durable queue;
-it does not send candidate data to OpenAI or generate a document yet. A later
-resume-generation worker can consume these marked rows after an explicit review
-gate. GPT-5.4 supports text output through the Responses API; see the
+backfills existing matches above 85%. Matching only creates the durable queue;
+it does not send candidate data to OpenAI. Resume generation requires an
+explicit command for one marked job. GPT-5.4 supports text output through the
+Responses API; see the
 [official model documentation](https://developers.openai.com/api/docs/models/gpt-5.4).
+
+### Generate one marked resume
+
+Configure the OpenAI API key and optional generation limits in `.env`:
+
+```env
+OPENAI_API_KEY=your-api-key
+JOB_AGENT_RESUME_GENERATION_MODEL=gpt-5.4
+JOB_AGENT_RESUME_GENERATION_TIMEOUT_SECONDS=120
+JOB_AGENT_RESUME_GENERATION_MAX_OUTPUT_TOKENS=6000
+JOB_AGENT_RESUME_GENERATION_PROMPT=prompts/generate_resume.txt
+```
+
+Keep the key in `.env`, which is ignored by Git, or inject it from the deployment
+environment. Do not commit it. API keys are created from the
+[OpenAI API key page](https://platform.openai.com/api-keys).
+
+Find a job that has completed eligibility review and is marked as a generation
+candidate:
+
+```sql
+SELECT job_id, `match`, title, company, resume_generation_model
+FROM job_prospects
+WHERE resume_generation_checked = TRUE
+  AND resume_generation_candidate = TRUE
+ORDER BY `match` DESC;
+```
+
+Generate exactly one resume by its full `job_id`:
+
+```bash
+python3 app.py --generate-resume JOB_ID
+```
+
+The command rejects unknown jobs, unchecked jobs, and jobs that were checked but
+did not pass the configured threshold. It uses the model stored on that job,
+loads the normalized posting plus the reviewed candidate knowledge, and makes
+one OpenAI Responses API request with response storage disabled. The prompt
+excludes the raw scraper payload and local source-resume path and instructs the
+model to omit unsupported claims. The generated Markdown file is written to
+`JOB_AGENT_GENERATED_DOCUMENTS` (default: `data/generated_documents`) and is
+ignored by Git. Running the command again for the same candidate and job replaces
+that job's existing generated file. Review the document before using it in an
+application.
 
 ### Enable and Configure Job Searching
 
@@ -789,7 +833,12 @@ To run Python's built-in test discovery directly with verbose console output, us
 python3 -m unittest discover -s ./tests -p 'test_*.py' -v
 ```
 
-The suite covers resume knowledge, parsing, structured LLM matching, MySQL job-prospect persistence, the search safety flag, and fixture-based normalization for every Phase 3 source without making network or live-database requests. LLM and repository tests use injected fakes; use a separate integration environment to validate API credentials, model access, database credentials, and server permissions.
+The suite covers resume knowledge, parsing, structured LLM matching, single-job
+resume generation, MySQL job-prospect persistence, the search safety flag, and
+fixture-based normalization for every Phase 3 source without making network or
+live-database requests. LLM and repository tests use injected fakes; use a
+separate integration environment to validate API credentials, model access,
+database credentials, and server permissions.
 
 ## Optional API
 

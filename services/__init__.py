@@ -28,6 +28,15 @@ from .llm_service import (
     MissingGeminiDependencyError,
 )
 from .notification_service import LoggingNotificationService, NotificationService
+from .openai_resume_service import (
+    DisabledResumeGenerator,
+    MissingOpenAIDependencyError,
+    OpenAIResumeConfig,
+    OpenAIResumeGenerator,
+    ResumeGenerationNotConfiguredError,
+    ResumeGenerationResponseError,
+    ResumeGenerator,
+)
 from .resume_knowledge_service import ResumeKnowledgeError, ResumeKnowledgeService
 
 __all__ = [
@@ -52,6 +61,13 @@ __all__ = [
     "LoggingNotificationService",
     "NotificationService",
     "MissingGeminiDependencyError",
+    "DisabledResumeGenerator",
+    "MissingOpenAIDependencyError",
+    "OpenAIResumeConfig",
+    "OpenAIResumeGenerator",
+    "ResumeGenerationNotConfiguredError",
+    "ResumeGenerationResponseError",
+    "ResumeGenerator",
     "ResumeKnowledgeError",
     "ResumeKnowledgeService",
     "RequestsHttpClient",

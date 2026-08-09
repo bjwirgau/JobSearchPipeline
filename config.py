@@ -119,6 +119,12 @@ class Settings:
     matching_prompt_path: Path = PROJECT_ROOT / "prompts" / "score_match.txt"
     resume_candidate_threshold: float = DEFAULT_RESUME_CANDIDATE_THRESHOLD
     resume_generation_model: str = DEFAULT_RESUME_GENERATION_MODEL
+    openai_api_key: str | None = field(default=None, repr=False)
+    resume_generation_timeout_seconds: float = 120.0
+    resume_generation_max_output_tokens: int = 6_000
+    resume_generation_prompt_path: Path = (
+        PROJECT_ROOT / "prompts" / "generate_resume.txt"
+    )
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
@@ -248,6 +254,20 @@ class Settings:
                 "JOB_AGENT_RESUME_GENERATION_MODEL",
                 DEFAULT_RESUME_GENERATION_MODEL,
             ).strip(),
+            openai_api_key=values.get("OPENAI_API_KEY", "").strip() or None,
+            resume_generation_timeout_seconds=float(
+                values.get("JOB_AGENT_RESUME_GENERATION_TIMEOUT_SECONDS", "120")
+            ),
+            resume_generation_max_output_tokens=int(
+                values.get("JOB_AGENT_RESUME_GENERATION_MAX_OUTPUT_TOKENS", "6000")
+            ),
+            resume_generation_prompt_path=_resolve_path(
+                values.get(
+                    "JOB_AGENT_RESUME_GENERATION_PROMPT",
+                    "prompts/generate_resume.txt",
+                ),
+                PROJECT_ROOT,
+            ),
         )
 
     def __post_init__(self) -> None:
@@ -308,6 +328,14 @@ class Settings:
             )
         if not self.resume_generation_model:
             raise ValueError("JOB_AGENT_RESUME_GENERATION_MODEL must not be empty")
+        if self.resume_generation_timeout_seconds <= 0:
+            raise ValueError(
+                "JOB_AGENT_RESUME_GENERATION_TIMEOUT_SECONDS must be greater than zero"
+            )
+        if self.resume_generation_max_output_tokens <= 0:
+            raise ValueError(
+                "JOB_AGENT_RESUME_GENERATION_MAX_OUTPUT_TOKENS must be greater than zero"
+            )
         if bool(self.adzuna_app_id) != bool(self.adzuna_app_key):
             raise ValueError(
                 "JOB_AGENT_ADZUNA_APP_ID and JOB_AGENT_ADZUNA_APP_KEY must be set together"

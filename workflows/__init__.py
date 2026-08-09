@@ -7,6 +7,13 @@ from .job_matching_workflow import (
     JobMatchingWorkflowResult,
 )
 from .job_search_workflow import JobSearchWorkflow, JobSearchWorkflowResult
+from .resume_generation_workflow import (
+    ResumeGenerationJobDataError,
+    ResumeGenerationJobNotFoundError,
+    ResumeGenerationNotEligibleError,
+    ResumeGenerationWorkflow,
+    ResumeGenerationWorkflowResult,
+)
 
 __all__ = [
     "ApplicationWorkflow",
@@ -16,4 +23,9 @@ __all__ = [
     "JobMatchingWorkflowResult",
     "JobSearchWorkflow",
     "JobSearchWorkflowResult",
+    "ResumeGenerationJobDataError",
+    "ResumeGenerationJobNotFoundError",
+    "ResumeGenerationNotEligibleError",
+    "ResumeGenerationWorkflow",
+    "ResumeGenerationWorkflowResult",
 ]

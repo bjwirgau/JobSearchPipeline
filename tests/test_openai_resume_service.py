@@ -1,0 +1,88 @@
+"""OpenAI resume-generation service tests without network access."""
+
+from __future__ import annotations
+
+import unittest
+from types import SimpleNamespace
+
+from services import (
+    DisabledResumeGenerator,
+    OpenAIResumeConfig,
+    OpenAIResumeGenerator,
+    ResumeGenerationNotConfiguredError,
+    ResumeGenerationResponseError,
+)
+
+
+class FakeResponses:
+    def __init__(self, output: object) -> None:
+        self.output = output
+        self.calls: list[dict[str, object]] = []
+
+    def create(self, **arguments: object) -> object:
+        self.calls.append(arguments)
+        if isinstance(self.output, Exception):
+            raise self.output
+        return self.output
+
+
+class OpenAIResumeGeneratorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_generates_one_non_stored_response_with_selected_model(self) -> None:
+        responses = FakeResponses(SimpleNamespace(output_text="# Example Candidate"))
+        generator = OpenAIResumeGenerator(
+            OpenAIResumeConfig(
+                api_key="secret-key",
+                max_output_tokens=4_000,
+            ),
+            client=SimpleNamespace(responses=responses),
+        )
+
+        result = await generator.generate_resume("Candidate evidence", model="gpt-5.4")
+
+        self.assertEqual(result, "# Example Candidate")
+        self.assertEqual(len(responses.calls), 1)
+        request = responses.calls[0]
+        self.assertEqual(request["model"], "gpt-5.4")
+        self.assertEqual(request["input"], "Candidate evidence")
+        self.assertEqual(request["max_output_tokens"], 4_000)
+        self.assertFalse(request["store"])
+        self.assertIn("Never invent", request["instructions"])
+        self.assertNotIn("secret-key", repr(generator))
+
+    async def test_redacts_api_key_from_provider_errors(self) -> None:
+        responses = FakeResponses(RuntimeError("request with secret-key failed"))
+        generator = OpenAIResumeGenerator(
+            OpenAIResumeConfig(api_key="secret-key"),
+            client=SimpleNamespace(responses=responses),
+        )
+
+        with self.assertRaises(ResumeGenerationResponseError) as raised:
+            await generator.generate_resume("Evidence", model="gpt-5.4")
+
+        self.assertIn("RuntimeError", str(raised.exception))
+        self.assertNotIn("secret-key", str(raised.exception))
+
+    async def test_rejects_empty_response(self) -> None:
+        generator = OpenAIResumeGenerator(
+            OpenAIResumeConfig(api_key="secret-key"),
+            client=SimpleNamespace(
+                responses=FakeResponses(SimpleNamespace(output_text="  "))
+            ),
+        )
+
+        with self.assertRaisesRegex(ResumeGenerationResponseError, "no text output"):
+            await generator.generate_resume("Evidence", model="gpt-5.4")
+
+    async def test_disabled_generator_explains_required_configuration(self) -> None:
+        with self.assertRaisesRegex(
+            ResumeGenerationNotConfiguredError,
+            "OPENAI_API_KEY",
+        ):
+            await DisabledResumeGenerator().generate_resume(
+                "Evidence",
+                model="gpt-5.4",
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()
