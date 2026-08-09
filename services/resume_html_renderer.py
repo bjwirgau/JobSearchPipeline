@@ -12,6 +12,7 @@ from models import (
     ResumeCertification,
     ResumeEducation,
 )
+from utils.dates import format_month_year
 
 
 RESUME_CSS = """
@@ -90,6 +91,7 @@ h2 {
 p { margin: 0; }
 
 .summary { color: #273349; }
+.summary-title { color: var(--ink); }
 
 .skills-list {
   display: flex;
@@ -194,11 +196,18 @@ class ResumeHTMLRenderer:
         self,
         candidate: CandidateProfile,
         content: GeneratedResumeContent,
+        *,
+        target_title: str,
     ) -> str:
+        resolved_title = target_title.strip()
+        if not resolved_title:
+            raise ValueError("target resume title must not be empty")
         sections = [
             self._section(
                 "Professional Summary",
-                f'<p class="summary">{escape(content.professional_summary)}</p>',
+                '<p class="summary">'
+                f'<strong class="summary-title">{escape(resolved_title)}</strong>'
+                f" — {escape(content.professional_summary)}</p>",
             )
         ]
         if content.skills:
@@ -235,6 +244,8 @@ class ResumeHTMLRenderer:
             f'<a href="mailto:{escape(candidate.email, quote=True)}">'
             f"{escape(candidate.email)}</a>"
         ]
+        if candidate.phone:
+            contact.append(f"<span>{escape(candidate.phone)}</span>")
         if candidate.location:
             contact.append(f"<span>{escape(candidate.location)}</span>")
         return "\n".join(
@@ -244,7 +255,8 @@ class ResumeHTMLRenderer:
                 "<head>",
                 '  <meta charset="utf-8">',
                 '  <meta name="viewport" content="width=device-width, initial-scale=1">',
-                f"  <title>{escape(candidate.full_name)} — Resume</title>",
+                f"  <title>{escape(candidate.full_name)} — "
+                f"{escape(resolved_title)} Resume</title>",
                 "  <style>",
                 RESUME_CSS,
                 "  </style>",
@@ -313,7 +325,11 @@ class ResumeHTMLRenderer:
             metadata = " • ".join(
                 escape(part)
                 for part in (
-                    f"Issued {value.issued}" if value.issued else None,
+                    (
+                        f"Issued {format_month_year(value.issued)}"
+                        if value.issued
+                        else None
+                    ),
                     value.status,
                 )
                 if part
@@ -359,5 +375,9 @@ class ResumeHTMLRenderer:
     @staticmethod
     def _dates(role: GeneratedResumeRole) -> str:
         if role.start_date and role.end_date:
-            return f"{role.start_date} – {role.end_date}"
-        return role.start_date or role.end_date or ""
+            start = format_month_year(role.start_date)
+            end = format_month_year(role.end_date, allow_present=True)
+            return f"{start} – {end}"
+        if role.start_date:
+            return format_month_year(role.start_date)
+        return format_month_year(role.end_date, allow_present=True)

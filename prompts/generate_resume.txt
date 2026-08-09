@@ -13,6 +13,8 @@ Requirements:
   a preface, or a fenced code block; the application owns document formatting.
 - Use concise professional-summary, skills, experience, career-highlight, education,
   and certification content when the supplied evidence supports it.
+- Write `professional_summary` as body text without a leading role or job title. The
+  application inserts the target job's exact title into the rendered summary.
 - Select company names, job titles, locations, dates, responsibilities, career
   highlights, education, certifications, and skill names exactly as represented in
   RESUME KNOWLEDGE. Preserve the supplied object fields and null values. Do not rewrite

@@ -22,6 +22,7 @@ class ResumeDocxRendererTests(unittest.TestCase):
             candidate_id="candidate-1",
             full_name="Example Candidate",
             email="candidate@example.com",
+            phone="(555) 123-4567",
             location="Denver, CO",
             skills=("Python", "SQL"),
         )
@@ -102,7 +103,11 @@ class ResumeDocxRendererTests(unittest.TestCase):
         )
         content.validate_against(knowledge, candidate_skills=candidate.skills)
 
-        rendered = ResumeDocxRenderer().render(candidate, content)
+        rendered = ResumeDocxRenderer().render(
+            candidate,
+            content,
+            target_title="Senior Data Engineer",
+        )
 
         self.assertTrue(is_zipfile(BytesIO(rendered)))
         assert Document is not None
@@ -110,13 +115,20 @@ class ResumeDocxRendererTests(unittest.TestCase):
         text = "\n".join(paragraph.text for paragraph in document.paragraphs)
         self.assertIn("Example Candidate", text)
         self.assertIn("candidate@example.com", text)
+        self.assertIn("(555) 123-4567", text)
+        self.assertIn("Senior Data Engineer — Builds reliable data platforms.", text)
         self.assertIn("PROFESSIONAL EXPERIENCE", text)
         self.assertIn("Remote, US", text)
+        self.assertIn("January 2022 – Present", text)
         self.assertIn("Built reliable data pipelines.", text)
         self.assertIn("Improved platform reliability.", text)
         self.assertIn("Bachelor of Science in Computer Engineering", text)
         self.assertIn("Cloud Certification", text)
-        self.assertEqual(document.core_properties.title, "Example Candidate Resume")
+        self.assertIn("Issued January 2025", text)
+        self.assertEqual(
+            document.core_properties.title,
+            "Example Candidate - Senior Data Engineer Resume",
+        )
         self.assertAlmostEqual(document.sections[0].top_margin.inches, 0.55, places=2)
 
 

@@ -6,6 +6,7 @@ from io import BytesIO
 from typing import Any
 
 from models import CandidateProfile, GeneratedResumeContent, GeneratedResumeRole
+from utils.dates import format_month_year
 
 
 class MissingDocxDependencyError(RuntimeError):
@@ -19,7 +20,12 @@ class ResumeDocxRenderer:
         self,
         candidate: CandidateProfile,
         content: GeneratedResumeContent,
+        *,
+        target_title: str,
     ) -> bytes:
+        resolved_title = target_title.strip()
+        if not resolved_title:
+            raise ValueError("target resume title must not be empty")
         try:
             from docx import Document
             from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -38,7 +44,7 @@ class ResumeDocxRenderer:
 
         self._configure_styles(document)
         properties = document.core_properties
-        properties.title = f"{candidate.full_name} Resume"
+        properties.title = f"{candidate.full_name} - {resolved_title} Resume"
         properties.author = candidate.full_name
         properties.subject = "Tailored professional resume"
 
@@ -47,13 +53,17 @@ class ResumeDocxRenderer:
         name.add_run(candidate.full_name)
 
         contact_values = [candidate.email]
+        if candidate.phone:
+            contact_values.append(candidate.phone)
         if candidate.location:
             contact_values.append(candidate.location)
         contact = document.add_paragraph(" • ".join(contact_values), style="Subtitle")
         contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         self._add_heading(document, "Professional Summary")
-        document.add_paragraph(content.professional_summary)
+        summary = document.add_paragraph()
+        summary.add_run(f"{resolved_title} — ").bold = True
+        summary.add_run(content.professional_summary)
 
         if content.skills:
             self._add_heading(document, "Core Skills")
@@ -99,7 +109,11 @@ class ResumeDocxRenderer:
                 metadata = " • ".join(
                     part
                     for part in (
-                        f"Issued {value.issued}" if value.issued else None,
+                        (
+                            f"Issued {format_month_year(value.issued)}"
+                            if value.issued
+                            else None
+                        ),
                         value.status,
                     )
                     if part
@@ -188,5 +202,9 @@ class ResumeDocxRenderer:
     @staticmethod
     def _dates(role: GeneratedResumeRole) -> str:
         if role.start_date and role.end_date:
-            return f"{role.start_date} – {role.end_date}"
-        return role.start_date or role.end_date or ""
+            start = format_month_year(role.start_date)
+            end = format_month_year(role.end_date, allow_present=True)
+            return f"{start} – {end}"
+        if role.start_date:
+            return format_month_year(role.start_date)
+        return format_month_year(role.end_date, allow_present=True)

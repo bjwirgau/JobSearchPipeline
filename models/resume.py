@@ -7,7 +7,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Mapping
 
-from utils.dates import from_iso, to_iso, utc_now
+from utils.dates import format_month_year, from_iso, to_iso, utc_now
 from utils.text import normalize_text
 
 
@@ -92,6 +92,8 @@ class ResumeCertification:
         )
         object.__setattr__(self, "issued", _optional_string(self.issued))
         object.__setattr__(self, "status", _optional_string(self.status))
+        if self.issued:
+            format_month_year(self.issued)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -198,6 +200,10 @@ class ResumeRole:
         object.__setattr__(self, "location", _optional_string(self.location))
         object.__setattr__(self, "start_date", _optional_string(self.start_date))
         object.__setattr__(self, "end_date", _optional_string(self.end_date))
+        if self.start_date:
+            format_month_year(self.start_date)
+        if self.end_date:
+            format_month_year(self.end_date, allow_present=True)
 
     @property
     def evidence(self) -> tuple[str, ...]:

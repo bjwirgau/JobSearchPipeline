@@ -71,7 +71,11 @@ class ResumeGenerationAgent:
         name = f"{candidate.candidate_id}-{job.job_id}"
         artifacts: list[DocumentArtifact] = []
         if ResumeDocumentFormat.HTML.value in resolved_format.extensions:
-            document = self._renderer.render(candidate, content)
+            document = self._renderer.render(
+                candidate,
+                content,
+                target_title=job.title,
+            )
             artifacts.append(
                 self._documents.save_text(
                     kind="tailored-resume",
@@ -81,7 +85,11 @@ class ResumeGenerationAgent:
                 )
             )
         if ResumeDocumentFormat.DOCX.value in resolved_format.extensions:
-            document = self._docx_renderer.render(candidate, content)
+            document = self._docx_renderer.render(
+                candidate,
+                content,
+                target_title=job.title,
+            )
             artifacts.append(
                 self._documents.save_bytes(
                     kind="tailored-resume",
@@ -99,7 +107,6 @@ class ResumeGenerationAgent:
         job: JobPosting,
     ) -> str:
         candidate_evidence = {
-            "summary": candidate.summary,
             "skills": list(candidate.skills),
             "years_experience": candidate.years_experience,
         }

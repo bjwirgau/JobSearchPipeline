@@ -41,6 +41,10 @@ The resume knowledge base turns resume facts into validated JSON that matching c
 ```json
 {
   "candidate_id": "replace-me",
+  "full_name": "Example Candidate",
+  "email": "candidate@example.com",
+  "phone": "",
+  "location": "Denver, CO",
   "skills": ["Magento", "PHP", "Laravel", "React", "MySQL", "AWS"],
   "years": {
     "PHP": 10,
@@ -93,6 +97,10 @@ The knowledge layer includes:
 - A cautious extraction prompt for a future resume-ingestion provider
 
 `CandidateProfile` and `ResumeKnowledgeBase` read separate validated views from this one JSON file. When resume knowledge is saved, identity and job-preference fields are preserved.
+
+Set `phone` in `data/candidate_profile.json` to include it in generated resume
+contact details. An empty value omits it. Candidate name, email, phone, and location
+are inserted locally and are not sent to the resume-generation model.
 
 Phase 2 does not extract a PDF automatically. Review and correct the structured JSON before using it for matching; this prevents unsupported experience claims from becoming part of an application.
 
@@ -259,6 +267,12 @@ an editable DOCX resume, or both. The DOCX is created natively with professional
 Word styles rather than converted from browser CSS. Candidate contact details are
 added locally and are not included in the model request. The prompt also excludes
 the raw scraper payload and local source-resume path.
+
+The rendered professional summary begins with the job prospect's exact normalized
+title, ensuring that its title matches the target job. Resume role and certification
+dates must include month precision using `YYYY-MM` or `Month YYYY`; both renderers
+display them consistently as `Month YYYY`. `Present` is accepted for a role's end
+date.
 
 Generated `.html` and `.docx` files are written to
 `JOB_AGENT_GENERATED_DOCUMENTS` (default: `data/generated_documents`) and are

@@ -96,8 +96,9 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             candidate_id="candidate-1",
             full_name="Example Candidate",
             email="candidate@example.com",
+            phone="(555) 123-4567",
             location="Denver, CO",
-            summary="Builds reliable data platforms.",
+            summary="Original Senior Software Engineer summary.",
             skills=("Python", "SQL"),
             resume_path="/private/source-resume.pdf",
         )
@@ -198,6 +199,8 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(model, "gpt-5.4")
             self.assertNotIn("Example Candidate", prompt)
             self.assertNotIn("candidate@example.com", prompt)
+            self.assertNotIn("(555) 123-4567", prompt)
+            self.assertNotIn("Original Senior Software Engineer summary.", prompt)
             self.assertIn("Target Company", prompt)
             self.assertIn("Built a supported pipeline.", prompt)
             self.assertNotIn("/private/source-resume.pdf", prompt)
@@ -212,12 +215,20 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("@media print", html)
             self.assertIn("Example Candidate", html)
             self.assertIn("candidate@example.com", html)
+            self.assertIn("(555) 123-4567", html)
+            self.assertIn(
+                '<strong class="summary-title">Senior Data Engineer</strong>'
+                " — Builds reliable data platforms.",
+                html,
+            )
             self.assertIn("Professional Experience", html)
             self.assertIn("Remote, US", html)
+            self.assertIn("January 2022 – Present", html)
             self.assertIn("Built a supported pipeline.", html)
             self.assertIn("Improved platform reliability.", html)
             self.assertIn("Bachelor of Science in Computer Engineering", html)
             self.assertIn("Cloud Certification", html)
+            self.assertIn("Issued January 2025", html)
 
     async def test_rejects_job_that_is_not_marked_for_generation(self) -> None:
         self.repository.save_jobs((self.job,))

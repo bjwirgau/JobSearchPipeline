@@ -8,6 +8,7 @@ from models import (
     CandidateProfile,
     GeneratedResumeContent,
     InvalidGeneratedResumeError,
+    ResumeCertification,
     ResumeKnowledgeBase,
     ResumeRole,
 )
@@ -20,6 +21,7 @@ class ResumeHTMLRendererTests(unittest.TestCase):
             candidate_id="candidate-1",
             full_name="Example <Candidate>",
             email="candidate@example.com",
+            phone="(555) 123-4567",
             location="Denver & Remote",
             skills=("Python", "SQL"),
         )
@@ -31,14 +33,20 @@ class ResumeHTMLRendererTests(unittest.TestCase):
                     company="Example Corp",
                     title="Data Engineer",
                     location="Remote, US",
-                    start_date="2022",
+                    start_date="2022-01",
                     end_date="Present",
                     responsibilities=("Built reliable pipelines.",),
                 ),
             ),
             achievements=("Improved platform reliability.",),
             education=("B.S. Computer Engineering",),
-            certifications=("Cloud Certification",),
+            certifications=(
+                ResumeCertification(
+                    name="Cloud Certification",
+                    issued="2025-01",
+                    status="Current",
+                ),
+            ),
         )
 
     def test_renders_standalone_print_ready_html_and_escapes_values(self) -> None:
@@ -51,14 +59,20 @@ class ResumeHTMLRendererTests(unittest.TestCase):
                         "company": "Example Corp",
                         "title": "Data Engineer",
                         "location": "Remote, US",
-                        "start_date": "2022",
+                        "start_date": "2022-01",
                         "end_date": "Present",
                         "responsibilities": ["Built reliable pipelines."],
                     }
                 ],
                 "career_highlights": ["Improved platform reliability."],
                 "education": ["B.S. Computer Engineering"],
-                "certifications": ["Cloud Certification"],
+                "certifications": [
+                    {
+                        "name": "Cloud Certification",
+                        "issued": "2025-01",
+                        "status": "Current",
+                    }
+                ],
             }
         )
         content.validate_against(
@@ -66,15 +80,27 @@ class ResumeHTMLRendererTests(unittest.TestCase):
             candidate_skills=self.candidate.skills,
         )
 
-        document = ResumeHTMLRenderer().render(self.candidate, content)
+        document = ResumeHTMLRenderer().render(
+            self.candidate,
+            content,
+            target_title="Senior Data Engineer <Lead>",
+        )
 
         self.assertTrue(document.startswith("<!doctype html>"))
         self.assertIn("<style>", document)
         self.assertIn("@page { size: Letter", document)
         self.assertIn("@media print", document)
         self.assertIn("Example &lt;Candidate&gt;", document)
+        self.assertIn("(555) 123-4567", document)
         self.assertIn("Denver &amp; Remote", document)
+        self.assertIn(
+            '<strong class="summary-title">Senior Data Engineer &lt;Lead&gt;</strong>'
+            " — Engineering &lt;script&gt;",
+            document,
+        )
         self.assertIn("Remote, US", document)
+        self.assertIn("January 2022 – Present", document)
+        self.assertIn("Issued January 2025", document)
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", document)
         self.assertNotIn("<script>", document)
         self.assertNotIn("src=", document)
@@ -129,7 +155,7 @@ class ResumeHTMLRendererTests(unittest.TestCase):
                         "company": "Example Corp",
                         "title": "Data Engineer",
                         "location": "Remote, US",
-                        "start_date": "2022",
+                        "start_date": "2022-01",
                         "end_date": "Present",
                         "responsibilities": ["Invented an unsupported achievement."],
                     }

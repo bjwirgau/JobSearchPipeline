@@ -11,6 +11,7 @@ class CandidateProfile:
     candidate_id: str
     full_name: str
     email: str
+    phone: str = ""
     location: str = ""
     summary: str = ""
     skills: tuple[str, ...] = ()
@@ -26,6 +27,7 @@ class CandidateProfile:
             if not value:
                 raise ValueError(f"{field_name} must not be empty")
             object.__setattr__(self, field_name, value)
+        object.__setattr__(self, "phone", self.phone.strip())
         if self.years_experience < 0:
             raise ValueError("years_experience must not be negative")
         for field_name in ("skills", "desired_titles", "desired_locations"):
@@ -40,6 +42,7 @@ class CandidateProfile:
             "candidate_id": self.candidate_id,
             "full_name": self.full_name,
             "email": self.email,
+            "phone": self.phone,
             "location": self.location,
             "summary": self.summary,
             "skills": list(self.skills),
@@ -52,10 +55,12 @@ class CandidateProfile:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "CandidateProfile":
+        phone = value.get("phone")
         return cls(
             candidate_id=str(value["candidate_id"]),
             full_name=str(value["full_name"]),
             email=str(value["email"]),
+            phone=str(phone) if phone is not None else "",
             location=str(value.get("location", "")),
             summary=str(value.get("summary", "")),
             skills=tuple(value.get("skills", ())),

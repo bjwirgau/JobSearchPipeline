@@ -56,6 +56,7 @@ class ResumeKnowledgeTests(unittest.TestCase):
                         "candidate_id": "candidate-1",
                         "full_name": "Example Candidate",
                         "email": "candidate@example.com",
+                        "phone": "(555) 123-4567",
                         "skills": ["PHP"],
                         "desired_titles": ["Backend Engineer"],
                     }
@@ -74,6 +75,7 @@ class ResumeKnowledgeTests(unittest.TestCase):
 
             stored = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(stored["full_name"], "Example Candidate")
+            self.assertEqual(stored["phone"], "(555) 123-4567")
             self.assertEqual(stored["desired_titles"], ["Backend Engineer"])
             self.assertEqual(stored["skills"], ["PHP", "React"])
             self.assertEqual(stored["years"], {"PHP": 10.0})
@@ -100,6 +102,7 @@ class ResumeKnowledgeTests(unittest.TestCase):
         knowledge = ResumeKnowledgeService(path).load()
 
         self.assertEqual(candidate.candidate_id, knowledge.candidate_id)
+        self.assertEqual(candidate.phone, "")
         self.assertEqual(candidate.skills, knowledge.skills)
         self.assertIn("Magento", knowledge.all_skills)
         self.assertEqual(knowledge.years_for("Magento"), 10)
