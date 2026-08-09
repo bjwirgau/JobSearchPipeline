@@ -38,6 +38,7 @@ from .openai_resume_service import (
     ResumeGenerator,
 )
 from .resume_knowledge_service import ResumeKnowledgeError, ResumeKnowledgeService
+from .resume_html_renderer import RESUME_CSS, ResumeHTMLRenderer
 
 __all__ = [
     "CommonCrawlGreenhouseDiscovery",
@@ -70,6 +71,8 @@ __all__ = [
     "ResumeGenerator",
     "ResumeKnowledgeError",
     "ResumeKnowledgeService",
+    "RESUME_CSS",
+    "ResumeHTMLRenderer",
     "RequestsHttpClient",
     "ThrottledHttpClient",
     "build_job_sources",

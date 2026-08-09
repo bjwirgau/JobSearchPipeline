@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any, Mapping
 
 from agents import ResumeGenerationAgent
 from database import Database, MySQLConfig, initialize_schema
@@ -37,9 +38,29 @@ class StaticResumeGenerator:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
 
-    async def generate_resume(self, prompt: str, *, model: str) -> str:
+    async def generate_resume(
+        self,
+        prompt: str,
+        *,
+        model: str,
+    ) -> Mapping[str, Any]:
         self.calls.append((prompt, model))
-        return "# Example Candidate\n\n## Experience\nSupported evidence only."
+        return {
+            "professional_summary": "Builds reliable data platforms.",
+            "skills": ["Python", "SQL"],
+            "experience": [
+                {
+                    "company": "Example Corp",
+                    "title": "Data Engineer",
+                    "start_date": None,
+                    "end_date": None,
+                    "achievements": ["Built a supported pipeline."],
+                }
+            ],
+            "career_highlights": [],
+            "education": [],
+            "certifications": [],
+        }
 
 
 class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
@@ -61,6 +82,7 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
         )
         self.knowledge = ResumeKnowledgeBase(
             candidate_id="candidate-1",
+            skills=("Python", "SQL"),
             roles=(
                 ResumeRole(
                     company="Example Corp",
@@ -127,7 +149,8 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(generator.calls), 1)
             prompt, model = generator.calls[0]
             self.assertEqual(model, "gpt-5.4")
-            self.assertIn("Example Candidate", prompt)
+            self.assertNotIn("Example Candidate", prompt)
+            self.assertNotIn("candidate@example.com", prompt)
             self.assertIn("Target Company", prompt)
             self.assertIn("Built a supported pipeline.", prompt)
             self.assertNotIn("/private/source-resume.pdf", prompt)
@@ -135,10 +158,15 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             artifact_path = Path(result.artifact.path)
             self.assertTrue(artifact_path.exists())
             self.assertIn(self.job.job_id, artifact_path.name)
-            self.assertEqual(
-                artifact_path.read_text(encoding="utf-8"),
-                "# Example Candidate\n\n## Experience\nSupported evidence only.\n",
-            )
+            self.assertEqual(artifact_path.suffix, ".html")
+            html = artifact_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", html)
+            self.assertIn("<style>", html)
+            self.assertIn("@media print", html)
+            self.assertIn("Example Candidate", html)
+            self.assertIn("candidate@example.com", html)
+            self.assertIn("Professional Experience", html)
+            self.assertIn("Built a supported pipeline.", html)
 
     async def test_rejects_job_that_is_not_marked_for_generation(self) -> None:
         self.repository.save_jobs((self.job,))

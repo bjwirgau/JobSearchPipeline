@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from types import SimpleNamespace
 
@@ -28,7 +29,15 @@ class FakeResponses:
 
 class OpenAIResumeGeneratorTests(unittest.IsolatedAsyncioTestCase):
     async def test_generates_one_non_stored_response_with_selected_model(self) -> None:
-        responses = FakeResponses(SimpleNamespace(output_text="# Example Candidate"))
+        resume = {
+            "professional_summary": "Builds reliable data platforms.",
+            "skills": ["Python"],
+            "experience": [],
+            "career_highlights": [],
+            "education": [],
+            "certifications": [],
+        }
+        responses = FakeResponses(SimpleNamespace(output_text=json.dumps(resume)))
         generator = OpenAIResumeGenerator(
             OpenAIResumeConfig(
                 api_key="secret-key",
@@ -39,13 +48,17 @@ class OpenAIResumeGeneratorTests(unittest.IsolatedAsyncioTestCase):
 
         result = await generator.generate_resume("Candidate evidence", model="gpt-5.4")
 
-        self.assertEqual(result, "# Example Candidate")
+        self.assertEqual(result, resume)
         self.assertEqual(len(responses.calls), 1)
         request = responses.calls[0]
         self.assertEqual(request["model"], "gpt-5.4")
         self.assertEqual(request["input"], "Candidate evidence")
         self.assertEqual(request["max_output_tokens"], 4_000)
         self.assertFalse(request["store"])
+        response_format = request["text"]["format"]
+        self.assertEqual(response_format["type"], "json_schema")
+        self.assertTrue(response_format["strict"])
+        self.assertIn("professional_summary", response_format["schema"]["required"])
         self.assertIn("Never invent", request["instructions"])
         self.assertNotIn("secret-key", repr(generator))
 
@@ -71,6 +84,20 @@ class OpenAIResumeGeneratorTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with self.assertRaisesRegex(ResumeGenerationResponseError, "no text output"):
+            await generator.generate_resume("Evidence", model="gpt-5.4")
+
+    async def test_rejects_invalid_structured_json(self) -> None:
+        generator = OpenAIResumeGenerator(
+            OpenAIResumeConfig(api_key="secret-key"),
+            client=SimpleNamespace(
+                responses=FakeResponses(SimpleNamespace(output_text="not json"))
+            ),
+        )
+
+        with self.assertRaisesRegex(
+            ResumeGenerationResponseError,
+            "invalid structured JSON",
+        ):
             await generator.generate_resume("Evidence", model="gpt-5.4")
 
     async def test_disabled_generator_explains_required_configuration(self) -> None:

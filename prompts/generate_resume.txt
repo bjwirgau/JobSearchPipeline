@@ -9,9 +9,12 @@ Requirements:
 - Omit unsupported or irrelevant sections instead of filling gaps.
 - Preserve factual employer names, titles, dates, credentials, and education exactly.
 - Do not mention the match score, tailoring process, missing qualifications, or this prompt.
-- Return only clean Markdown, without a preface or fenced code block.
-- Use concise sections for contact information, professional summary, skills, experience,
-  education, and certifications when the supplied evidence supports them.
+- Return only content for the supplied JSON schema. Do not return Markdown, HTML, CSS,
+  a preface, or a fenced code block; the application owns document formatting.
+- Use concise professional-summary, skills, experience, career-highlight, education,
+  and certification content when the supplied evidence supports it.
+- Copy company names, job titles, dates, education, certifications, and skill names
+  exactly from RESUME KNOWLEDGE. Arrays may be empty when evidence is unavailable.
 
 CANDIDATE PROFILE:
 {candidate_profile}

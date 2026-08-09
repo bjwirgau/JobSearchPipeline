@@ -214,12 +214,18 @@ python3 app.py --generate-resume JOB_ID
 The command rejects unknown jobs, unchecked jobs, and jobs that were checked but
 did not pass the configured threshold. It uses the model stored on that job,
 loads the normalized posting plus the reviewed candidate knowledge, and makes
-one OpenAI Responses API request with response storage disabled. The prompt
-excludes the raw scraper payload and local source-resume path and instructs the
-model to omit unsupported claims. The generated Markdown file is written to
-`JOB_AGENT_GENERATED_DOCUMENTS` (default: `data/generated_documents`) and is
-ignored by Git. Running the command again for the same candidate and job replaces
-that job's existing generated file. Review the document before using it in an
+one OpenAI Responses API request with response storage disabled. GPT returns
+schema-constrained resume content rather than document markup. The application
+validates factual fields against the reviewed candidate knowledge and renders a
+standalone, ATS-friendly HTML resume with embedded professional CSS. Candidate
+contact details are added locally and are not included in the model request. The
+prompt also excludes the raw scraper payload and local source-resume path.
+
+The generated `.html` file is written to `JOB_AGENT_GENERATED_DOCUMENTS`
+(default: `data/generated_documents`) and is ignored by Git. Open it in a browser
+to review it or use the browser's **Print → Save as PDF** function when a PDF is
+needed. Running the command again for the same candidate and job replaces that
+job's existing generated file. Always review the document before using it in an
 application.
 
 ### Enable and Configure Job Searching

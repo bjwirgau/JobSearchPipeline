@@ -4,8 +4,14 @@ from __future__ import annotations
 
 import json
 
-from models import CandidateProfile, DocumentArtifact, JobPosting, ResumeKnowledgeBase
-from services import DocumentService, ResumeGenerator
+from models import (
+    CandidateProfile,
+    DocumentArtifact,
+    GeneratedResumeContent,
+    JobPosting,
+    ResumeKnowledgeBase,
+)
+from services import DocumentService, ResumeGenerator, ResumeHTMLRenderer
 
 
 PROMPT_FIELDS = ("candidate_profile", "resume_knowledge", "job_posting")
@@ -18,6 +24,7 @@ class ResumeGenerationAgent:
         generator: ResumeGenerator,
         documents: DocumentService,
         prompt_template: str,
+        renderer: ResumeHTMLRenderer | None = None,
     ) -> None:
         missing_fields = [
             field for field in PROMPT_FIELDS if "{" + field + "}" not in prompt_template
@@ -30,6 +37,7 @@ class ResumeGenerationAgent:
         self._generator = generator
         self._documents = documents
         self._prompt_template = prompt_template
+        self._renderer = renderer or ResumeHTMLRenderer()
 
     async def generate(
         self,
@@ -44,11 +52,18 @@ class ResumeGenerationAgent:
                 "candidate profile and resume knowledge must have the same candidate_id"
             )
         prompt = self._render_prompt(candidate, knowledge, job)
-        content = await self._generator.generate_resume(prompt, model=model)
+        response = await self._generator.generate_resume(prompt, model=model)
+        content = GeneratedResumeContent.from_dict(response)
+        content.validate_against(
+            knowledge,
+            candidate_skills=candidate.skills,
+        )
+        document = self._renderer.render(candidate, content)
         return self._documents.save_text(
             kind="tailored-resume",
             name=f"{candidate.candidate_id}-{job.job_id}",
-            content=content.rstrip() + "\n",
+            content=document,
+            extension="html",
         )
 
     def _render_prompt(
@@ -58,12 +73,18 @@ class ResumeGenerationAgent:
         job: JobPosting,
     ) -> str:
         candidate_evidence = {
-            "full_name": candidate.full_name,
-            "email": candidate.email,
-            "location": candidate.location,
             "summary": candidate.summary,
             "skills": list(candidate.skills),
             "years_experience": candidate.years_experience,
+        }
+        resume_evidence = {
+            "skills": list(knowledge.skills),
+            "years": dict(knowledge.years),
+            "industries": list(knowledge.industries),
+            "roles": [role.to_dict() for role in knowledge.roles],
+            "achievements": list(knowledge.achievements),
+            "certifications": list(knowledge.certifications),
+            "education": list(knowledge.education),
         }
         job_evidence = {
             "title": job.title,
@@ -80,7 +101,7 @@ class ResumeGenerationAgent:
         rendered = self._prompt_template
         replacements = {
             "candidate_profile": candidate_evidence,
-            "resume_knowledge": knowledge.to_dict(),
+            "resume_knowledge": resume_evidence,
             "job_posting": job_evidence,
         }
         for field, value in replacements.items():

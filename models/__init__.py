@@ -22,6 +22,11 @@ from .job_prospect import (
     DEFAULT_RESUME_GENERATION_MODEL,
     JobProspect,
 )
+from .generated_resume import (
+    GeneratedResumeContent,
+    GeneratedResumeRole,
+    InvalidGeneratedResumeError,
+)
 from .match import MatchBreakdown, MatchResult
 from .resume import ResumeKnowledgeBase, ResumeRole
 from .workflow import StageRecord, WorkflowRun, WorkflowStage, WorkflowStatus
@@ -39,6 +44,9 @@ __all__ = [
     "DocumentArtifact",
     "DEFAULT_RESUME_CANDIDATE_THRESHOLD",
     "DEFAULT_RESUME_GENERATION_MODEL",
+    "GeneratedResumeContent",
+    "GeneratedResumeRole",
+    "InvalidGeneratedResumeError",
     "JobPosting",
     "JobProspect",
     "MatchBreakdown",
