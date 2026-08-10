@@ -162,7 +162,8 @@ Normalized jobs consistently include source identity, title, company, URL, locat
 MySQL stores the review-oriented projection in `job_prospects` with `job_id`,
 `match`, `title`, `company`, `location`, `salary`, `source`, `url`, `posted_at`,
 `job_data`, `resume_generation_checked`, `resume_generation_candidate`,
-`resume_generation_model`, `resume_file_name`, `created_at`, and `updated_at`
+`resume_generation_model`, `resume_file_name`, `cover_letter_file_name`,
+`created_at`, and `updated_at`
 columns. `job_data`
 retains the complete
 normalized posting needed by the asynchronous matcher. The database assigns both UTC timestamps when a
@@ -236,13 +237,14 @@ After Gemini matching, a score strictly greater than
 generation candidate. The intended generation model is stored alongside the
 job and defaults to the official `gpt-5.4` model ID. Schema migration 9 also
 backfills existing matches above 85%. Matching only creates the durable queue;
-it does not send candidate data to OpenAI. Resumes can be generated explicitly
-for one marked job or by the optional scheduled queue worker. GPT-5.4 supports
+it does not send candidate data to OpenAI. Resume and cover-letter packages can
+be generated explicitly for one marked job or by the optional scheduled queue
+worker. GPT-5.4 supports
 text output through the
 Responses API; see the
 [official model documentation](https://developers.openai.com/api/docs/models/gpt-5.4).
 
-### Generate marked resumes
+### Generate resumes and cover letters
 
 Configure the OpenAI API key and optional generation limits in `.env`:
 
@@ -252,6 +254,7 @@ JOB_AGENT_RESUME_GENERATION_MODEL=gpt-5.4
 JOB_AGENT_RESUME_GENERATION_TIMEOUT_SECONDS=120
 JOB_AGENT_RESUME_GENERATION_MAX_OUTPUT_TOKENS=6000
 JOB_AGENT_RESUME_GENERATION_PROMPT=prompts/generate_resume.txt
+JOB_AGENT_COVER_LETTER_GENERATION_PROMPT=prompts/generate_cover_letter.txt
 JOB_AGENT_RESUME_GENERATION_BATCH_LIMIT=1
 JOB_AGENT_RESUME_GENERATION_BATCH_FORMAT=docx
 ```
@@ -264,22 +267,23 @@ Find a job that has completed eligibility review and is marked as a generation
 candidate:
 
 ```sql
-SELECT job_id, `match`, title, company, resume_generation_model, resume_file_name
+SELECT job_id, `match`, title, company, resume_generation_model,
+       resume_file_name, cover_letter_file_name
 FROM job_prospects
 WHERE resume_generation_checked = TRUE
   AND resume_generation_candidate = TRUE
-  AND resume_file_name IS NULL
+  AND (resume_file_name IS NULL OR cover_letter_file_name IS NULL)
 ORDER BY `match` DESC;
 ```
 
-Generate exactly one resume by its full `job_id`:
+Generate exactly one resume and cover letter by the full `job_id`:
 
 ```bash
 python3 app.py --generate-resume JOB_ID
 ```
 
 HTML remains the default. Use `--resume-format` to generate an editable Microsoft
-Word document or both supported formats from the same OpenAI response:
+Word documents or both supported formats:
 
 ```bash
 python3 app.py --generate-resume JOB_ID --resume-format docx
@@ -289,14 +293,25 @@ python3 app.py --generate-resume JOB_ID --resume-format both
 The command rejects unknown jobs, unchecked jobs, and jobs that were checked but
 did not pass the configured threshold. It uses the model stored on that job,
 loads the normalized posting plus the reviewed candidate knowledge, and makes
-one OpenAI Responses API request with response storage disabled. GPT returns
-schema-constrained resume content rather than document markup. The application
+one OpenAI Responses API request for the resume and one for the cover letter,
+with response storage disabled for both. GPT returns schema-constrained content
+rather than document markup. The application
 validates selected responsibilities and structured factual records against the
 reviewed candidate knowledge and renders a standalone, ATS-friendly HTML resume,
 an editable DOCX resume, or both. The DOCX is created natively with professional
 Word styles rather than converted from browser CSS. Candidate contact details are
 added locally and are not included in the model request. The prompt also excludes
 the raw scraper payload and local source-resume path.
+
+The cover-letter prompt treats all supplied JSON as untrusted evidence and
+requires every generated paragraph to cite stable evidence IDs. The application
+rejects unknown IDs before writing the file. It instructs the model to connect
+only supported experience to the company's stated priorities, prohibits invented
+skills, achievements, motivations, hiring-manager details, and company
+relationships, and limits the body to three or four paragraphs and 350 words.
+Contact details, date, company address block, salutation, closing, and signature
+are inserted locally. The fixed Letter-size HTML and DOCX layouts are designed to
+keep the validated content to one page. Always review both documents before use.
 
 The resume-generation LLM inspects the narrative summary inside the normalized job
 description and returns `target_title` only when that summary explicitly declares a
@@ -309,7 +324,7 @@ using `YYYY-MM` or `Month YYYY`; both renderers display them consistently as
 for job titles in the Professional Experience section. In DOCX output, each experience
 date range is right-aligned across from its job title.
 
-Generated `.html` and `.docx` files are written to
+Generated resume and cover-letter `.html` and `.docx` files are written to
 `JOB_AGENT_GENERATED_DOCUMENTS` (default: `data/generated_documents`) and are
 ignored by Git. Open HTML in a browser to review it or use the browser's
 **Print → Save as PDF** function when a PDF is needed. DOCX files can be edited in
@@ -317,10 +332,12 @@ Microsoft Word, LibreOffice Writer, or another compatible editor. Running the
 command again for the same candidate, job, and format replaces the existing file.
 Always review the document before using it in an application.
 
-After a successful write, the application stores the generated file's basename
-in `job_prospects.resume_file_name`. For `--resume-format both`, the DOCX
-filename is stored. A null filename represents a queued generation candidate;
-failed attempts stay null and can be retried.
+After both documents are written, the application stores their basenames in
+`job_prospects.resume_file_name` and `job_prospects.cover_letter_file_name` in
+one database update. For `--resume-format both`, the DOCX filenames are stored.
+If either filename is null, the package remains queued; failed attempts can be
+retried. This also lets the scheduled worker create cover letters for eligible
+rows that already have a resume from an earlier release.
 
 ### Prepare an application without submitting it
 
@@ -587,10 +604,10 @@ JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN=15
 * * * * * /opt/job-agent/scripts/run_job_matcher.sh
 ```
 
-The resume generator also runs every minute by default. It selects the
-least-recently-attempted candidates that do not yet have a `resume_file_name`,
-uses match score as a tie-breaker, generates the configured format, and stores
-the basename only after the document is written successfully:
+The document generator also runs every minute by default. It selects the
+least-recently-attempted candidates missing a resume or cover-letter filename,
+uses match score as a tie-breaker, generates both documents in the configured
+format, and stores their basenames only after both are written successfully:
 
 ```cron
 JOB_AGENT_RESUME_GENERATION_BATCH_LIMIT=1
@@ -598,7 +615,7 @@ JOB_AGENT_RESUME_GENERATION_BATCH_FORMAT=docx
 * * * * * /opt/job-agent/scripts/run_resume_generator.sh
 ```
 
-The conservative default processes one resume per minute to control OpenAI API
+The conservative default processes one document package per minute to control OpenAI API
 usage and instance load; raise the limit to at most 100 when appropriate. The
 repeated cron runs eventually drain every eligible row. Each runner uses a lock
 directory, so an overlapping invocation exits without starting another batch.
@@ -669,8 +686,9 @@ includes legacy scores not graded by the current LLM workflow. A successful
 evaluation marks the flag true whether or not the role qualifies; failed jobs
 remain unchecked and are retried by a later minute-based run.
 
-The resume worker only selects rows marked as candidates with a non-null match,
-generation model, and normalized `job_data`, and a null `resume_file_name`.
+The document worker only selects rows marked as candidates with a non-null match,
+generation model, and normalized `job_data`, where either `resume_file_name` or
+`cover_letter_file_name` is null.
 Each attempt refreshes `updated_at`, so a persistent failure moves behind other
 pending work instead of blocking the queue. Failures are logged and remain
 pending for a later run. Successful files are stored under

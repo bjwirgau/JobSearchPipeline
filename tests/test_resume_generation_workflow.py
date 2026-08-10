@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping
 
-from agents import ResumeGenerationAgent
+from agents import CoverLetterGenerationAgent, ResumeGenerationAgent
 from database import Database, MySQLConfig, initialize_schema
 from models import (
     CandidateProfile,
@@ -35,10 +35,15 @@ PROMPT = """\
 CANDIDATE\n{candidate_profile}\nKNOWLEDGE\n{resume_knowledge}\nJOB\n{job_posting}
 """
 
+COVER_LETTER_PROMPT = """\
+CANDIDATE\n{candidate_profile}\nKNOWLEDGE\n{resume_knowledge}\nJOB\n{job_posting}
+"""
+
 
 class StaticResumeGenerator:
     def __init__(self, *, target_title: str | None = None) -> None:
         self.calls: list[tuple[str, str]] = []
+        self.cover_letter_calls: list[tuple[str, str]] = []
         self.target_title = target_title
 
     async def generate_resume(
@@ -84,6 +89,33 @@ class StaticResumeGenerator:
                     "status": "Current",
                 }
             ],
+        }
+
+    async def generate_cover_letter(
+        self,
+        prompt: str,
+        *,
+        model: str,
+    ) -> Mapping[str, Any]:
+        self.cover_letter_calls.append((prompt, model))
+        return {
+            "paragraphs": [
+                {
+                    "text": (
+                        "I am applying for the Senior Data Engineer role at "
+                        "Target Company."
+                    ),
+                    "evidence_ids": ["job.title", "job.company"],
+                },
+                {
+                    "text": "I built a supported pipeline at Example Corp.",
+                    "evidence_ids": ["resume.role.0"],
+                },
+                {
+                    "text": "I welcome the opportunity to discuss the role.",
+                    "evidence_ids": ["job.title"],
+                },
+            ]
         }
 
 
@@ -172,6 +204,11 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 documents=DocumentService(directory),
                 prompt_template=PROMPT,
             ),
+            cover_letter_agent=CoverLetterGenerationAgent(
+                generator=generator,
+                documents=DocumentService(directory),
+                prompt_template=COVER_LETTER_PROMPT,
+            ),
         )
         return workflow, generator
 
@@ -204,6 +241,7 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.job, self.job)
             self.assertEqual(result.model, "gpt-5.4")
             self.assertEqual(len(generator.calls), 1)
+            self.assertEqual(len(generator.cover_letter_calls), 1)
             prompt, model = generator.calls[0]
             self.assertEqual(model, "gpt-5.4")
             self.assertNotIn("Example Candidate", prompt)
@@ -229,6 +267,17 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 self.repository.get(self.job.job_id).resume_file_name,
                 artifact_path.name,
             )
+            self.assertEqual(len(result.cover_letter_artifacts), 1)
+            cover_letter_path = Path(result.cover_letter_artifacts[0].path)
+            self.assertTrue(cover_letter_path.exists())
+            self.assertEqual(cover_letter_path.suffix, ".html")
+            self.assertEqual(
+                result.prospect.cover_letter_file_name,
+                cover_letter_path.name,
+            )
+            cover_letter = cover_letter_path.read_text(encoding="utf-8")
+            self.assertIn("Dear Target Company Hiring Team,", cover_letter)
+            self.assertIn("I built a supported pipeline", cover_letter)
             html = artifact_path.read_text(encoding="utf-8")
             self.assertIn("<!doctype html>", html)
             self.assertIn("<style>", html)
@@ -428,7 +477,9 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             )
 
             self.assertEqual(len(generator.calls), 1)
+            self.assertEqual(len(generator.cover_letter_calls), 1)
             self.assertEqual(len(result.artifacts), 2)
+            self.assertEqual(len(result.cover_letter_artifacts), 2)
             paths = tuple(Path(artifact.path) for artifact in result.artifacts)
             self.assertEqual({path.suffix for path in paths}, {".html", ".docx"})
             self.assertTrue(all(path.exists() for path in paths))
@@ -438,6 +489,16 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(
                 self.repository.get(self.job.job_id).resume_file_name,
                 docx_path.name,
+            )
+            cover_docx_path = next(
+                Path(artifact.path)
+                for artifact in result.cover_letter_artifacts
+                if Path(artifact.path).suffix == ".docx"
+            )
+            self.assertTrue(cover_docx_path.read_bytes().startswith(b"PK"))
+            self.assertEqual(
+                result.prospect.cover_letter_file_name,
+                cover_docx_path.name,
             )
 
     async def test_reports_unknown_job(self) -> None:

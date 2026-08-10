@@ -128,6 +128,9 @@ class Settings:
     resume_generation_prompt_path: Path = (
         PROJECT_ROOT / "prompts" / "generate_resume.txt"
     )
+    cover_letter_generation_prompt_path: Path = (
+        PROJECT_ROOT / "prompts" / "generate_cover_letter.txt"
+    )
     application_browser_enabled: bool = False
     application_browser_headless: bool = False
     application_browser_timeout_seconds: float = 30.0
@@ -283,6 +286,13 @@ class Settings:
                 values.get(
                     "JOB_AGENT_RESUME_GENERATION_PROMPT",
                     "prompts/generate_resume.txt",
+                ),
+                PROJECT_ROOT,
+            ),
+            cover_letter_generation_prompt_path=_resolve_path(
+                values.get(
+                    "JOB_AGENT_COVER_LETTER_GENERATION_PROMPT",
+                    "prompts/generate_cover_letter.txt",
                 ),
                 PROJECT_ROOT,
             ),

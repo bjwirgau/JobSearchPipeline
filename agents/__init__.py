@@ -13,7 +13,7 @@ from .application_form_agent import (
     ApplicationFormAnswerResult,
     InvalidApplicationAnswerResponseError,
 )
-from .cover_letter_agent import CoverLetterAgent
+from .cover_letter_agent import CoverLetterAgent, CoverLetterGenerationAgent
 from .matching_agent import InvalidMatchResponseError, MatchingAgent
 from .parser_agent import ParserAgent
 from .resume_generation_agent import ResumeGenerationAgent
@@ -30,6 +30,7 @@ __all__ = [
     "CompanyCrawlerDisabledError",
     "CompanyCrawlResult",
     "CoverLetterAgent",
+    "CoverLetterGenerationAgent",
     "GreenhouseCompanyCrawler",
     "InvalidMatchResponseError",
     "InvalidApplicationAnswerResponseError",

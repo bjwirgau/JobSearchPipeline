@@ -1,6 +1,8 @@
 """External capability boundaries used by agents and workflows."""
 
 from .document_service import DocumentService
+from .cover_letter_docx_renderer import CoverLetterDocxRenderer
+from .cover_letter_html_renderer import COVER_LETTER_CSS, CoverLetterHTMLRenderer
 from .embedding_service import EmbeddingService
 from .greenhouse_company_discovery import (
     CommonCrawlGreenhouseDiscovery,
@@ -31,6 +33,7 @@ from .llm_service import (
 )
 from .notification_service import LoggingNotificationService, NotificationService
 from .openai_resume_service import (
+    CoverLetterGenerationResponseError,
     DisabledResumeGenerator,
     MissingOpenAIDependencyError,
     OpenAIResumeConfig,
@@ -46,6 +49,10 @@ from .resume_html_renderer import RESUME_CSS, ResumeHTMLRenderer
 __all__ = [
     "CommonCrawlGreenhouseDiscovery",
     "CompanyDiscoveryError",
+    "COVER_LETTER_CSS",
+    "CoverLetterDocxRenderer",
+    "CoverLetterHTMLRenderer",
+    "CoverLetterGenerationResponseError",
     "DocumentService",
     "EmbeddingService",
     "GreenhouseBoardCandidate",

@@ -31,6 +31,7 @@ class JobProspect:
     resume_generation_candidate: bool = False
     resume_generation_model: str | None = None
     resume_file_name: str | None = None
+    cover_letter_file_name: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -47,11 +48,13 @@ class JobProspect:
             if not model:
                 raise ValueError("resume_generation_model must not be empty")
             object.__setattr__(self, "resume_generation_model", model)
-        if self.resume_file_name is not None:
-            file_name = self.resume_file_name.strip()
-            if not file_name:
-                raise ValueError("resume_file_name must not be empty")
-            object.__setattr__(self, "resume_file_name", file_name)
+        for field_name in ("resume_file_name", "cover_letter_file_name"):
+            value = getattr(self, field_name)
+            if value is not None:
+                file_name = value.strip()
+                if not file_name:
+                    raise ValueError(f"{field_name} must not be empty")
+                object.__setattr__(self, field_name, file_name)
         if self.resume_generation_candidate and self.resume_generation_model is None:
             raise ValueError(
                 "resume_generation_model is required for a resume candidate"
@@ -119,6 +122,11 @@ class JobProspect:
                 if row.get("resume_file_name") is not None
                 else None
             ),
+            cover_letter_file_name=(
+                str(row["cover_letter_file_name"])
+                if row.get("cover_letter_file_name") is not None
+                else None
+            ),
             created_at=_timestamp(row.get("created_at")),
             updated_at=_timestamp(row.get("updated_at")),
         )
@@ -138,6 +146,7 @@ class JobProspect:
             "resume_generation_candidate": self.resume_generation_candidate,
             "resume_generation_model": self.resume_generation_model,
             "resume_file_name": self.resume_file_name,
+            "cover_letter_file_name": self.cover_letter_file_name,
             "created_at": to_iso(self.created_at),
             "updated_at": to_iso(self.updated_at),
         }

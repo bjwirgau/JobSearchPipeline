@@ -89,6 +89,9 @@ class CountryEligibilityTests(unittest.TestCase):
                 "JOB_AGENT_RESUME_GENERATION_MAX_OUTPUT_TOKENS": "5000",
                 "JOB_AGENT_RESUME_GENERATION_BATCH_LIMIT": "3",
                 "JOB_AGENT_RESUME_GENERATION_BATCH_FORMAT": "both",
+                "JOB_AGENT_COVER_LETTER_GENERATION_PROMPT": (
+                    "prompts/generate_cover_letter.txt"
+                ),
                 "JOB_AGENT_APPLICATION_BROWSER_ENABLED": "true",
                 "JOB_AGENT_APPLICATION_BROWSER_HEADLESS": "true",
                 "JOB_AGENT_APPLICATION_BROWSER_TIMEOUT_SECONDS": "20",
@@ -110,6 +113,10 @@ class CountryEligibilityTests(unittest.TestCase):
         self.assertEqual(settings.resume_generation_max_output_tokens, 5000)
         self.assertEqual(settings.resume_generation_batch_limit, 3)
         self.assertEqual(settings.resume_generation_batch_format, "both")
+        self.assertEqual(
+            settings.cover_letter_generation_prompt_path.name,
+            "generate_cover_letter.txt",
+        )
         self.assertTrue(settings.application_browser_enabled)
         self.assertTrue(settings.application_browser_headless)
         self.assertEqual(settings.application_browser_timeout_seconds, 20)

@@ -66,7 +66,11 @@ class StubResumeGenerationWorkflow:
             raise RuntimeError("generation unavailable")
         prospect = _prospect(job_id, 0.9)
         prospect = JobProspect.from_row(
-            {**prospect.to_dict(), "resume_file_name": f"{job_id}.docx"}
+            {
+                **prospect.to_dict(),
+                "resume_file_name": f"{job_id}.docx",
+                "cover_letter_file_name": f"{job_id}-cover-letter.docx",
+            }
         )
         job = JobPosting(
             job_id=job_id,
@@ -84,6 +88,13 @@ class StubResumeGenerationWorkflow:
                     kind="resume",
                     path=f"/tmp/{job_id}.docx",
                     content_hash="hash",
+                ),
+            ),
+            cover_letter_artifacts=(
+                DocumentArtifact(
+                    kind="cover-letter",
+                    path=f"/tmp/{job_id}-cover-letter.docx",
+                    content_hash="cover-hash",
                 ),
             ),
             model="gpt-5.4",

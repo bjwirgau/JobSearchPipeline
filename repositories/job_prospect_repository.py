@@ -200,7 +200,8 @@ class JobProspectRepository:
                 SELECT job_id, `match`, title, company, location, salary, source,
                        url, posted_at, resume_generation_checked,
                        resume_generation_candidate, resume_generation_model,
-                       resume_file_name, created_at, updated_at
+                       resume_file_name, cover_letter_file_name,
+                       created_at, updated_at
                 FROM job_prospects
                 WHERE resume_generation_checked = TRUE
                   AND resume_generation_candidate = TRUE
@@ -225,13 +226,17 @@ class JobProspectRepository:
                 SELECT job_id, `match`, title, company, location, salary, source,
                        url, posted_at, resume_generation_checked,
                        resume_generation_candidate, resume_generation_model,
-                       resume_file_name, created_at, updated_at
+                       resume_file_name, cover_letter_file_name,
+                       created_at, updated_at
                 FROM job_prospects
                 WHERE `match` IS NOT NULL
                   AND resume_generation_checked = TRUE
                   AND resume_generation_candidate = TRUE
                   AND resume_generation_model IS NOT NULL
-                  AND resume_file_name IS NULL
+                  AND (
+                      resume_file_name IS NULL
+                      OR cover_letter_file_name IS NULL
+                  )
                   AND job_data IS NOT NULL
                 ORDER BY updated_at, `match` DESC, created_at, job_id
                 LIMIT %s
@@ -253,7 +258,10 @@ class JobProspectRepository:
                 WHERE job_id = %s
                   AND resume_generation_checked = TRUE
                   AND resume_generation_candidate = TRUE
-                  AND resume_file_name IS NULL
+                  AND (
+                      resume_file_name IS NULL
+                      OR cover_letter_file_name IS NULL
+                  )
                 """,
                 (resolved_job_id,),
             )
@@ -286,6 +294,48 @@ class JobProspectRepository:
             if cursor.rowcount != 1:
                 raise LookupError(f"job prospect not found: {resolved_job_id}")
 
+    def record_generated_document_file_names(
+        self,
+        job_id: str,
+        resume_file_name: str,
+        cover_letter_file_name: str,
+    ) -> None:
+        resolved_job_id = job_id.strip()
+        resume_name = self._document_file_name(
+            resume_file_name,
+            kind="resume",
+        )
+        cover_letter_name = self._document_file_name(
+            cover_letter_file_name,
+            kind="cover letter",
+        )
+        if not resolved_job_id:
+            raise ValueError("job_id must not be empty")
+        with self._database.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE job_prospects
+                SET resume_file_name = %s,
+                    cover_letter_file_name = %s,
+                    updated_at = UTC_TIMESTAMP(6)
+                WHERE job_id = %s
+                """,
+                (resume_name, cover_letter_name, resolved_job_id),
+            )
+            if cursor.rowcount != 1:
+                raise LookupError(f"job prospect not found: {resolved_job_id}")
+
+    @staticmethod
+    def _document_file_name(file_name: str, *, kind: str) -> str:
+        resolved = file_name.strip()
+        if not resolved:
+            raise ValueError(f"{kind} file name must not be empty")
+        if len(resolved) > 255:
+            raise ValueError(f"{kind} file name must be at most 255 characters")
+        if "/" in resolved or "\\" in resolved:
+            raise ValueError(f"{kind} file name must not contain a path")
+        return resolved
+
     def matched_job_ids(self, job_ids: Sequence[str]) -> frozenset[str]:
         unique_ids = tuple(dict.fromkeys(job_id for job_id in job_ids if job_id))
         if not unique_ids:
@@ -311,7 +361,8 @@ class JobProspectRepository:
                 SELECT job_id, `match`, title, company, location, salary, source, url,
                        posted_at, resume_generation_checked,
                        resume_generation_candidate, resume_generation_model,
-                       resume_file_name, created_at, updated_at
+                       resume_file_name, cover_letter_file_name,
+                       created_at, updated_at
                 FROM job_prospects
                 WHERE job_id = %s
                 """,
@@ -353,7 +404,8 @@ class JobProspectRepository:
                 SELECT job_id, `match`, title, company, location, salary, source, url,
                        posted_at, resume_generation_checked,
                        resume_generation_candidate, resume_generation_model,
-                       resume_file_name, created_at, updated_at
+                       resume_file_name, cover_letter_file_name,
+                       created_at, updated_at
                 FROM job_prospects
                 ORDER BY (`match` IS NULL), `match` DESC, title, company
                 LIMIT %s

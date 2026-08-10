@@ -33,6 +33,12 @@ from .generated_resume import (
     InvalidGeneratedResumeError,
     ResumeDocumentFormat,
 )
+from .generated_cover_letter import (
+    COVER_LETTER_MAX_WORDS,
+    GeneratedCoverLetterContent,
+    GeneratedCoverLetterParagraph,
+    InvalidGeneratedCoverLetterError,
+)
 from .match import MatchBreakdown, MatchResult
 from .resume import (
     ResumeAchievement,
@@ -59,9 +65,13 @@ __all__ = [
     "DocumentArtifact",
     "DEFAULT_RESUME_CANDIDATE_THRESHOLD",
     "DEFAULT_RESUME_GENERATION_MODEL",
+    "COVER_LETTER_MAX_WORDS",
+    "GeneratedCoverLetterContent",
+    "GeneratedCoverLetterParagraph",
     "GeneratedResumeContent",
     "GeneratedResumeRole",
     "InvalidGeneratedResumeError",
+    "InvalidGeneratedCoverLetterError",
     "JobPosting",
     "JobProspect",
     "MatchBreakdown",

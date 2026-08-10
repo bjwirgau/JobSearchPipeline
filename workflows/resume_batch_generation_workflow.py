@@ -1,4 +1,4 @@
-"""Generate resumes for eligible job prospects that have no stored filename."""
+"""Generate missing resume and cover-letter packages for eligible jobs."""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ class ResumeBatchGenerationWorkflow:
         failures: list[ResumeBatchGenerationFailure] = []
         for prospect in selected:
             LOGGER.info(
-                "Generating queued resume: job_id=%s match=%.2f title=%s",
+                "Generating queued document package: job_id=%s match=%.2f title=%s",
                 prospect.job_id,
                 prospect.match or 0,
                 prospect.title,
@@ -79,7 +79,7 @@ class ResumeBatchGenerationWorkflow:
                 )
             except Exception as error:
                 LOGGER.exception(
-                    "Queued resume generation failed: job_id=%s title=%s",
+                    "Queued document generation failed: job_id=%s title=%s",
                     prospect.job_id,
                     prospect.title,
                 )

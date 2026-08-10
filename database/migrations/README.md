@@ -24,3 +24,5 @@ The complete MySQL schema for new databases is defined in `database/schema.py`. 
   LLM evaluation.
 - `013_resume_file_name.sql` records generated resume filenames and indexes the
   pending resume-generation queue.
+- `014_cover_letter_file_name.sql` records the cover letter generated alongside
+  each resume and queues existing resume candidates that do not yet have one.

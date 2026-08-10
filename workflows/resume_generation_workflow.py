@@ -1,4 +1,4 @@
-"""Generate one resume for a stored job explicitly marked as eligible."""
+"""Generate one resume package for a stored job marked as eligible."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from agents import ResumeGenerationAgent
+from agents import CoverLetterGenerationAgent, ResumeGenerationAgent
 from models import (
     CandidateProfile,
     DocumentArtifact,
@@ -38,6 +38,7 @@ class ResumeGenerationWorkflowResult:
     prospect: JobProspect
     job: JobPosting
     artifacts: tuple[DocumentArtifact, ...]
+    cover_letter_artifacts: tuple[DocumentArtifact, ...]
     model: str
 
     @property
@@ -53,9 +54,11 @@ class ResumeGenerationWorkflow:
         *,
         repository: JobProspectRepository,
         agent: ResumeGenerationAgent,
+        cover_letter_agent: CoverLetterGenerationAgent,
     ) -> None:
         self._repository = repository
         self._agent = agent
+        self._cover_letter_agent = cover_letter_agent
 
     async def run(
         self,
@@ -102,6 +105,20 @@ class ResumeGenerationWorkflow:
             model=prospect.resume_generation_model,
             document_format=resolved_format,
         )
+        LOGGER.info(
+            "Generating cover letter: job_id=%s title=%s company=%s model=%s",
+            job.job_id,
+            job.title,
+            job.company,
+            prospect.resume_generation_model,
+        )
+        cover_letter_artifacts = await self._cover_letter_agent.generate(
+            candidate=candidate,
+            knowledge=knowledge,
+            job=job,
+            model=prospect.resume_generation_model,
+            document_format=resolved_format,
+        )
         preferred_artifact = next(
             (
                 artifact
@@ -111,14 +128,29 @@ class ResumeGenerationWorkflow:
             artifacts[0],
         )
         resume_file_name = Path(preferred_artifact.path).name
-        self._repository.record_resume_file_name(
+        preferred_cover_letter = next(
+            (
+                artifact
+                for artifact in cover_letter_artifacts
+                if Path(artifact.path).suffix.casefold() == ".docx"
+            ),
+            cover_letter_artifacts[0],
+        )
+        cover_letter_file_name = Path(preferred_cover_letter.path).name
+        self._repository.record_generated_document_file_names(
             resolved_job_id,
             resume_file_name,
+            cover_letter_file_name,
         )
-        prospect = replace(prospect, resume_file_name=resume_file_name)
+        prospect = replace(
+            prospect,
+            resume_file_name=resume_file_name,
+            cover_letter_file_name=cover_letter_file_name,
+        )
         return ResumeGenerationWorkflowResult(
             prospect=prospect,
             job=job,
             artifacts=artifacts,
+            cover_letter_artifacts=cover_letter_artifacts,
             model=prospect.resume_generation_model,
         )

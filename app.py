@@ -16,6 +16,7 @@ from typing import Sequence
 from agents import (
     ApplicationFormAgent,
     CompanyCrawlerDisabledError,
+    CoverLetterGenerationAgent,
     GreenhouseCompanyCrawler,
     InvalidApplicationAnswerResponseError,
     MatchingAgent,
@@ -49,6 +50,7 @@ from repositories import (
 )
 from services import (
     CompanyDiscoveryError,
+    CoverLetterGenerationResponseError,
     DisabledResumeGenerator,
     DisabledLLMService,
     DocumentService,
@@ -239,9 +241,17 @@ def build_container(
             encoding="utf-8"
         ),
     )
+    cover_letter_generation_agent = CoverLetterGenerationAgent(
+        generator=resume_generator,
+        documents=DocumentService(settings.generated_documents_dir),
+        prompt_template=settings.cover_letter_generation_prompt_path.read_text(
+            encoding="utf-8"
+        ),
+    )
     resume_generation_workflow = ResumeGenerationWorkflow(
         repository=job_prospects,
         agent=resume_generation_agent,
+        cover_letter_agent=cover_letter_generation_agent,
     )
     application_llm = (
         OpenAILLMService(
@@ -318,12 +328,12 @@ def _arguments(
     parser.add_argument(
         "--generate-resume",
         metavar="JOB_ID",
-        help="generate one resume for a job marked as a resume candidate",
+        help="generate a resume and cover letter for a marked job",
     )
     parser.add_argument(
         "--generate-matched-resumes",
         action="store_true",
-        help="generate resumes for matched candidates without a stored filename",
+        help="generate missing resume and cover-letter packages for matched jobs",
     )
     parser.add_argument(
         "--prepare-application",
@@ -339,7 +349,7 @@ def _arguments(
         "--resume-limit",
         type=int,
         default=settings.resume_generation_batch_limit if settings else 1,
-        help="maximum queued resumes to generate, up to 100",
+        help="maximum queued document packages to generate, up to 100",
     )
     parser.add_argument(
         "--match-limit",
@@ -748,21 +758,31 @@ async def _run_resume_generation(
         ResumeGenerationNotEligibleError,
         ResumeGenerationNotConfiguredError,
         ResumeGenerationResponseError,
+        CoverLetterGenerationResponseError,
         ResumeKnowledgeError,
         MissingDocxDependencyError,
         MissingOpenAIDependencyError,
         TypeError,
         ValueError,
     ) as error:
-        logging.getLogger(__name__).error("Resume generation failed: %s", error)
+        logging.getLogger(__name__).error(
+            "Application document generation failed: %s",
+            error,
+        )
         return 1
 
-    print(f"Generated resume for {result.job.title} at {result.job.company}.")
+    print(
+        f"Generated resume and cover letter for "
+        f"{result.job.title} at {result.job.company}."
+    )
     print(f"Job ID: {result.job.job_id}")
     print(f"Model: {result.model}")
     for artifact in result.artifacts:
         suffix = Path(artifact.path).suffix.removeprefix(".").upper()
-        print(f"Saved ({suffix}): {artifact.path}")
+        print(f"Saved resume ({suffix}): {artifact.path}")
+    for artifact in result.cover_letter_artifacts:
+        suffix = Path(artifact.path).suffix.removeprefix(".").upper()
+        print(f"Saved cover letter ({suffix}): {artifact.path}")
     return 0
 
 
@@ -788,6 +808,7 @@ async def _run_matched_resume_generation(
         )
     except (
         ResumeGenerationNotConfiguredError,
+        CoverLetterGenerationResponseError,
         ResumeKnowledgeError,
         MissingDocxDependencyError,
         MissingOpenAIDependencyError,
@@ -795,23 +816,26 @@ async def _run_matched_resume_generation(
         ValueError,
     ) as error:
         logging.getLogger(__name__).error(
-            "Matched resume generation failed: %s",
+            "Matched document generation failed: %s",
             error,
         )
         return 1
 
     print(
-        f"Selected {len(result.selected)} queued resume candidates; "
+        f"Selected {len(result.selected)} queued document candidates; "
         f"generated {len(result.generated)}; "
         f"failed {len(result.failures)}."
     )
     for generated in result.generated:
         print(
             f"Generated {generated.job.job_id}: "
-            f"{generated.prospect.resume_file_name}"
+            f"resume={generated.prospect.resume_file_name} "
+            f"cover_letter={generated.prospect.cover_letter_file_name}"
         )
         for artifact in generated.artifacts:
-            print(f"  Saved: {artifact.path}")
+            print(f"  Saved resume: {artifact.path}")
+        for artifact in generated.cover_letter_artifacts:
+            print(f"  Saved cover letter: {artifact.path}")
     for failure in result.failures:
         logging.getLogger(__name__).error(
             "job_id=%s title=%s error=%s: %s",

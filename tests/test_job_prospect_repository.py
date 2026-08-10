@@ -220,6 +220,26 @@ class JobProspectRepositoryTests(unittest.TestCase):
 
         stored = self.repository.get(job.job_id)
         self.assertEqual(stored.resume_file_name, file_name)
+        self.assertIsNone(stored.cover_letter_file_name)
+        self.assertEqual(
+            tuple(
+                value.job_id
+                for value in self.repository.list_pending_resume_generation_candidates()
+            ),
+            (job.job_id,),
+        )
+
+        cover_letter_file_name = (
+            "candidate-resume-job-tailored-cover-letter.docx"
+        )
+        self.repository.record_generated_document_file_names(
+            job.job_id,
+            file_name,
+            cover_letter_file_name,
+        )
+        stored = self.repository.get(job.job_id)
+        self.assertEqual(stored.resume_file_name, file_name)
+        self.assertEqual(stored.cover_letter_file_name, cover_letter_file_name)
         self.assertEqual(
             self.repository.list_pending_resume_generation_candidates(),
             (),
@@ -228,6 +248,12 @@ class JobProspectRepositoryTests(unittest.TestCase):
             self.repository.record_resume_file_name(job.job_id, f"data/{file_name}")
         with self.assertRaisesRegex(LookupError, "not found"):
             self.repository.record_resume_file_name("unknown-job", file_name)
+        with self.assertRaisesRegex(ValueError, "cover letter.*path"):
+            self.repository.record_generated_document_file_names(
+                job.job_id,
+                file_name,
+                f"data/{cover_letter_file_name}",
+            )
 
     def test_preserves_scraped_posting_date_when_later_enrichment_fails(self) -> None:
         posted_at = datetime(2026, 8, 1, 12, tzinfo=timezone.utc)

@@ -107,6 +107,7 @@ class FakeMySQLCursor:
                         "resume_generation_candidate",
                         "resume_generation_model",
                         "resume_file_name",
+                        "cover_letter_file_name",
                         "created_at",
                         "updated_at",
                     }
@@ -154,6 +155,8 @@ class FakeMySQLCursor:
                 requested_columns = {"resume_generation_checked"}
             elif "column_name = 'resume_file_name'" in statement:
                 requested_columns = {"resume_file_name"}
+            elif "column_name = 'cover_letter_file_name'" in statement:
+                requested_columns = {"cover_letter_file_name"}
             elif "'resume_generation_candidate'" in statement:
                 requested_columns = {
                     "resume_generation_candidate",
@@ -209,6 +212,12 @@ class FakeMySQLCursor:
                 self._connection.job_prospect_columns.add("resume_file_name")
                 for row in self._connection.tables["job_prospects"].values():
                     row["resume_file_name"] = None
+            if "add column cover_letter_file_name" in statement:
+                self._connection.job_prospect_columns.add(
+                    "cover_letter_file_name"
+                )
+                for row in self._connection.tables["job_prospects"].values():
+                    row["cover_letter_file_name"] = None
             return
         if statement.startswith("alter table company_prospects"):
             if "add column last_job_search_at" in statement:
@@ -307,6 +316,9 @@ class FakeMySQLCursor:
                 "resume_file_name": (
                     existing.get("resume_file_name") if existing else None
                 ),
+                "cover_letter_file_name": (
+                    existing.get("cover_letter_file_name") if existing else None
+                ),
                 "created_at": existing["created_at"] if existing else now,
                 "updated_at": now,
             }
@@ -381,8 +393,20 @@ class FakeMySQLCursor:
                     row
                     and row.get("resume_generation_checked", False)
                     and row.get("resume_generation_candidate", False)
-                    and row.get("resume_file_name") is None
+                    and (
+                        row.get("resume_file_name") is None
+                        or row.get("cover_letter_file_name") is None
+                    )
                 ):
+                    row["updated_at"] = to_utc_naive(utc_now())
+                    self.rowcount = 1
+                return
+            if "cover_letter_file_name = %s" in statement:
+                resume_file_name, cover_letter_file_name, job_id = values
+                row = self._connection.tables["job_prospects"].get(job_id)
+                if row:
+                    row["resume_file_name"] = resume_file_name
+                    row["cover_letter_file_name"] = cover_letter_file_name
                     row["updated_at"] = to_utc_naive(utc_now())
                     self.rowcount = 1
                 return
@@ -466,6 +490,9 @@ class FakeMySQLCursor:
                 return
             if "resume_generation_candidate = true" in statement:
                 limit = int(values[0])
+                requires_document = (
+                    "or cover_letter_file_name is null" in statement
+                )
                 rows = sorted(
                     (
                         row
@@ -478,7 +505,13 @@ class FakeMySQLCursor:
                             or row.get("resume_generation_checked", False)
                         )
                         and (
-                            "resume_file_name is null" not in statement
+                            not requires_document
+                            or row.get("resume_file_name") is None
+                            or row.get("cover_letter_file_name") is None
+                        )
+                        and (
+                            requires_document
+                            or "resume_file_name is null" not in statement
                             or row.get("resume_file_name") is None
                         )
                         and (

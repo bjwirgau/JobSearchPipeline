@@ -74,7 +74,7 @@ if [ ! -x "$python_path" ]; then
     exit 1
 fi
 
-printf '%s Starting queued resume generation (limit=%s, format=%s).\n' \
+printf '%s Starting queued document generation (limit=%s, format=%s).\n' \
     "$(timestamp)" "$resume_limit" "$resume_format"
 cd "$project_root"
 
@@ -86,6 +86,6 @@ set +e
 status=$?
 set -e
 
-printf '%s Resume generation finished with status %s.\n' \
+printf '%s Document generation finished with status %s.\n' \
     "$(timestamp)" "$status"
 exit "$status"
