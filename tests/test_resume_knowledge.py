@@ -60,6 +60,7 @@ class ResumeKnowledgeTests(unittest.TestCase):
                         "linkedin_url": "https://linkedin.com/in/example",
                         "github_url": "https://github.com/example",
                         "website_url": "https://example.dev",
+                        "additional_keywords": ["Technical Leadership"],
                         "skills": ["PHP"],
                         "desired_titles": ["Backend Engineer"],
                     }
@@ -84,6 +85,9 @@ class ResumeKnowledgeTests(unittest.TestCase):
             )
             self.assertEqual(stored["github_url"], "https://github.com/example")
             self.assertEqual(stored["website_url"], "https://example.dev")
+            self.assertEqual(
+                stored["additional_keywords"], ["Technical Leadership"]
+            )
             self.assertEqual(stored["desired_titles"], ["Backend Engineer"])
             self.assertEqual(stored["skills"], ["PHP", "React"])
             self.assertEqual(stored["years"], {"PHP": 10.0})
@@ -114,6 +118,10 @@ class ResumeKnowledgeTests(unittest.TestCase):
         self.assertEqual(candidate.linkedin_url, payload.get("linkedin_url", ""))
         self.assertEqual(candidate.github_url, payload.get("github_url", ""))
         self.assertEqual(candidate.website_url, payload.get("website_url", ""))
+        self.assertEqual(
+            candidate.additional_keywords,
+            tuple(payload.get("additional_keywords", ())),
+        )
         self.assertEqual(candidate.skills, knowledge.skills)
         self.assertIn("Magento", knowledge.all_skills)
         self.assertEqual(knowledge.years_for("Magento"), 10)

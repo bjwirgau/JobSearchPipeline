@@ -56,7 +56,7 @@ h1 {
   margin: 0;
   color: var(--ink);
   font-size: 26pt;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: -0.035em;
   line-height: 1.08;
 }
@@ -84,7 +84,7 @@ h2 {
   color: var(--accent);
   border-bottom: 1px solid var(--rule);
   font-size: 10.5pt;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -128,13 +128,15 @@ p { margin: 0; }
 h3 {
   margin: 0;
   font-size: 11.5pt;
-  font-weight: 700;
+  font-weight: 400;
 }
+
+.role-title { font-weight: 700; }
 
 .company {
   margin-top: 1px;
   color: var(--muted);
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .company-location { font-weight: 400; }
@@ -207,7 +209,7 @@ class ResumeHTMLRenderer:
             self._section(
                 "Professional Summary",
                 '<p class="summary">'
-                f'<strong class="summary-title">{escape(resolved_title)}</strong>'
+                f'<span class="summary-title">{escape(resolved_title)}</span>'
                 f" — {escape(content.professional_summary)}</p>",
             )
         ]
@@ -306,7 +308,7 @@ class ResumeHTMLRenderer:
         items: list[str] = []
         for value in values:
             category = (
-                f'<strong class="highlight-category">{escape(value.category)}:</strong> '
+                f'<span class="highlight-category">{escape(value.category)}:</span> '
                 if value.category
                 else ""
             )
@@ -385,7 +387,7 @@ class ResumeHTMLRenderer:
             '<article class="role">'
             '<div class="role-heading">'
             "<div>"
-            f"<h3>{escape(role.title)}</h3>"
+            f'<h3 class="role-title">{escape(role.title)}</h3>'
             f'<p class="company">{escape(role.company)}{location}</p>'
             "</div>"
             + (f'<p class="dates">{escape(dates)}</p>' if dates else "")

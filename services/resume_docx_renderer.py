@@ -7,6 +7,8 @@ from typing import Any
 
 from models import CandidateProfile, GeneratedResumeContent, GeneratedResumeRole
 from utils.dates import format_month_year
+from datetime import datetime
+import re
 
 
 class MissingDocxDependencyError(RuntimeError):
@@ -71,7 +73,7 @@ class ResumeDocxRenderer:
 
         self._add_heading(document, "Professional Summary")
         summary = document.add_paragraph()
-        summary.add_run(f"{resolved_title} — ").bold = True
+        summary.add_run(f"{resolved_title} — ")
         summary.add_run(content.professional_summary)
 
         if content.skills:
@@ -88,7 +90,7 @@ class ResumeDocxRenderer:
             for value in content.career_highlights:
                 paragraph = document.add_paragraph(style="List Bullet")
                 if value.category:
-                    paragraph.add_run(f"{value.category}: ").bold = True
+                    paragraph.add_run(f"{value.category}: ")
                 paragraph.add_run(value.description)
 
         if content.education:
@@ -100,7 +102,7 @@ class ResumeDocxRenderer:
                 heading = qualification or value.institution
                 paragraph = document.add_paragraph()
                 paragraph.paragraph_format.keep_with_next = True
-                paragraph.add_run(heading).bold = True
+                paragraph.add_run(heading)
                 if qualification:
                     paragraph.add_run(f"\n{value.institution}")
                 metadata = " • ".join(
@@ -114,7 +116,7 @@ class ResumeDocxRenderer:
             for value in content.certifications:
                 paragraph = document.add_paragraph()
                 paragraph.paragraph_format.keep_with_next = True
-                paragraph.add_run(value.name).bold = True
+                paragraph.add_run(value.name)
                 metadata = " • ".join(
                     part
                     for part in (
@@ -145,6 +147,7 @@ class ResumeDocxRenderer:
         normal = document.styles["Normal"]
         normal.font.name = "Arial"
         normal.font.size = Pt(10)
+        normal.font.bold = False
         normal.font.color.rgb = ink
         normal.paragraph_format.space_after = Pt(3)
         normal.paragraph_format.line_spacing = 1.08
@@ -152,13 +155,14 @@ class ResumeDocxRenderer:
         title = document.styles["Title"]
         title.font.name = "Arial"
         title.font.size = Pt(24)
-        title.font.bold = True
+        title.font.bold = False
         title.font.color.rgb = ink
         title.paragraph_format.space_after = Pt(3)
 
         subtitle = document.styles["Subtitle"]
         subtitle.font.name = "Arial"
         subtitle.font.size = Pt(9)
+        subtitle.font.bold = False
         subtitle.font.italic = False
         subtitle.font.color.rgb = muted
         subtitle.paragraph_format.space_after = Pt(9)
@@ -166,7 +170,7 @@ class ResumeDocxRenderer:
         heading = document.styles["Heading 1"]
         heading.font.name = "Arial"
         heading.font.size = Pt(10.5)
-        heading.font.bold = True
+        heading.font.bold = False
         heading.font.color.rgb = accent
         heading.paragraph_format.space_before = Pt(10)
         heading.paragraph_format.space_after = Pt(4)
@@ -175,6 +179,7 @@ class ResumeDocxRenderer:
         bullet = document.styles["List Bullet"]
         bullet.font.name = "Arial"
         bullet.font.size = Pt(10)
+        bullet.font.bold = False
         bullet.paragraph_format.space_after = Pt(2)
 
     @staticmethod
@@ -183,27 +188,37 @@ class ResumeDocxRenderer:
 
     @staticmethod
     def _add_role(document: Any, role: GeneratedResumeRole) -> None:
-        from docx.shared import Pt, RGBColor
+        from docx.enum.text import WD_TAB_ALIGNMENT
+        from docx.shared import Emu, Pt, RGBColor
 
         heading = document.add_paragraph()
         heading.paragraph_format.keep_with_next = True
         heading.paragraph_format.space_before = Pt(4)
         heading.paragraph_format.space_after = Pt(1)
+        section = document.sections[0]
+        content_width = Emu(
+            section.page_width - section.left_margin - section.right_margin
+        )
+        heading.paragraph_format.tab_stops.add_tab_stop(
+            content_width,
+            WD_TAB_ALIGNMENT.RIGHT,
+        )
         heading.add_run(role.title).bold = True
 
+        dates = ResumeDocxRenderer._dates(role)
+        if dates:
+            heading.add_run("\t")
+            date_run = heading.add_run(dates)
+            date_run.italic = True
+            date_run.font.size = Pt(9)
+            date_run.font.color.rgb = RGBColor(83, 97, 118)
+
         company = heading.add_run(f"\n{role.company}")
-        company.bold = True
+        company.bold = False
         company.font.color.rgb = RGBColor(83, 97, 118)
         if role.location:
             location = heading.add_run(f" • {role.location}")
             location.font.color.rgb = RGBColor(83, 97, 118)
-
-        dates = ResumeDocxRenderer._dates(role)
-        if dates:
-            date_run = heading.add_run(f"\n{dates}")
-            date_run.italic = True
-            date_run.font.size = Pt(9)
-            date_run.font.color.rgb = RGBColor(83, 97, 118)
 
         for responsibility in role.responsibilities:
             document.add_paragraph(responsibility, style="List Bullet")
@@ -211,9 +226,9 @@ class ResumeDocxRenderer:
     @staticmethod
     def _dates(role: GeneratedResumeRole) -> str:
         if role.start_date and role.end_date:
-            start = format_month_year(role.start_date)
-            end = format_month_year(role.end_date, allow_present=True)
+            start = datetime.strptime(role.start_date, "%Y-%m").strftime("%b %Y")
+            end = datetime.strptime(role.end_date, "%Y-%m").strftime("%b %Y") if re.match("\d{4}-\d{2}", role.end_date) else "Current"
             return f"{start} – {end}"
         if role.start_date:
-            return format_month_year(role.start_date)
-        return format_month_year(role.end_date, allow_present=True)
+            return datetime.strptime(role.start_date, "%Y-%m").strftime("%b %Y")
+        return datetime.strptime(role.end_date, "%Y-%m").strftime("%b %Y") if re.match("\d{4}-\d{2}", role.end_date) else "Current"

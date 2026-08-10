@@ -104,6 +104,7 @@ class GeneratedResumeRole:
 @dataclass(frozen=True, slots=True)
 class GeneratedResumeContent:
     professional_summary: str
+    target_title: str | None
     skills: tuple[str, ...]
     experience: tuple[GeneratedResumeRole, ...]
     career_highlights: tuple[ResumeAchievement, ...]
@@ -127,6 +128,7 @@ class GeneratedResumeContent:
                 value.get("professional_summary"),
                 "professional_summary",
             ),
+            target_title=_optional_string(value.get("target_title"), "target_title"),
             skills=_strings(value.get("skills"), "skills"),
             experience=tuple(experience),
             career_highlights=cls._structured_values(

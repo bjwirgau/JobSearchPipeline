@@ -30,6 +30,7 @@ class FakeResponses:
 class OpenAIResumeGeneratorTests(unittest.IsolatedAsyncioTestCase):
     async def test_generates_one_non_stored_response_with_selected_model(self) -> None:
         resume = {
+            "target_title": None,
             "professional_summary": "Builds reliable data platforms.",
             "skills": ["Python"],
             "experience": [],
@@ -58,8 +59,10 @@ class OpenAIResumeGeneratorTests(unittest.IsolatedAsyncioTestCase):
         response_format = request["text"]["format"]
         self.assertEqual(response_format["type"], "json_schema")
         self.assertTrue(response_format["strict"])
+        self.assertIn("target_title", response_format["schema"]["required"])
         self.assertIn("professional_summary", response_format["schema"]["required"])
         properties = response_format["schema"]["properties"]
+        self.assertEqual(properties["target_title"]["type"], ["string", "null"])
         experience_properties = properties["experience"]["items"]["properties"]
         self.assertIn("location", experience_properties)
         self.assertIn("responsibilities", experience_properties)
@@ -67,6 +70,7 @@ class OpenAIResumeGeneratorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(properties["education"]["items"]["type"], "object")
         self.assertEqual(properties["certifications"]["items"]["type"], "object")
         self.assertIn("Never invent", request["instructions"])
+        self.assertIn("do not copy original_title", request["instructions"])
         self.assertNotIn("secret-key", repr(generator))
 
     async def test_redacts_api_key_from_provider_errors(self) -> None:

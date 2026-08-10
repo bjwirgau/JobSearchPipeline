@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -14,9 +15,10 @@ from tests.mysql_fakes import FakeMySQLServer
 
 class JobProspectRepositoryTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.server = FakeMySQLServer()
         database = Database(
             MySQLConfig(),
-            connect_factory=FakeMySQLServer().connect,
+            connect_factory=self.server.connect,
         )
         initialize_schema(database)
         self.repository = JobProspectRepository(database)
@@ -103,6 +105,36 @@ class JobProspectRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(final.created_at, created.created_at)
         self.assertGreaterEqual(final.updated_at, updated.updated_at)
+
+    def test_job_description_title_precedes_job_prospect_title(self) -> None:
+        job = JobPosting(
+            source="sample",
+            external_id="title-precedence",
+            title="Description Data Engineer",
+            company="Example",
+            url="https://example.com/jobs/title-precedence",
+            description="Build reliable data platforms.",
+        )
+        self.repository.save_jobs((job,))
+        fallback_title = "Prospect Data Engineer"
+        self.repository.save(
+            JobProspect.from_job(replace(job, title=fallback_title))
+        )
+
+        stored = self.repository.get_job_posting(job.job_id)
+
+        self.assertIsNotNone(stored)
+        self.assertEqual(stored.title, job.title)
+
+        row = self.server.tables["job_prospects"][job.job_id]
+        payload = json.loads(row["job_data"])
+        payload.pop("title")
+        row["job_data"] = json.dumps(payload)
+
+        fallback = self.repository.get_job_posting(job.job_id)
+
+        self.assertIsNotNone(fallback)
+        self.assertEqual(fallback.title, fallback_title)
 
     def test_match_must_exceed_threshold_to_become_resume_candidate(self) -> None:
         jobs = tuple(

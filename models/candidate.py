@@ -23,6 +23,7 @@ class CandidateProfile:
     linkedin_url: str = ""
     github_url: str = ""
     website_url: str = ""
+    additional_keywords: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for field_name in ("candidate_id", "full_name", "email"):
@@ -34,7 +35,12 @@ class CandidateProfile:
             object.__setattr__(self, field_name, getattr(self, field_name).strip())
         if self.years_experience < 0:
             raise ValueError("years_experience must not be negative")
-        for field_name in ("skills", "desired_titles", "desired_locations"):
+        for field_name in (
+            "skills",
+            "desired_titles",
+            "desired_locations",
+            "additional_keywords",
+        ):
             object.__setattr__(
                 self,
                 field_name,
@@ -50,6 +56,7 @@ class CandidateProfile:
             "location": self.location,
             "summary": self.summary,
             "skills": list(self.skills),
+            "additional_keywords": list(self.additional_keywords),
             "years_experience": self.years_experience,
             "desired_titles": list(self.desired_titles),
             "desired_locations": list(self.desired_locations),
@@ -82,4 +89,5 @@ class CandidateProfile:
             linkedin_url=str(linkedin_url) if linkedin_url is not None else "",
             github_url=str(github_url) if github_url is not None else "",
             website_url=str(website_url) if website_url is not None else "",
+            additional_keywords=tuple(value.get("additional_keywords", ())),
         )

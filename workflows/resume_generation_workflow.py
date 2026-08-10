@@ -87,9 +87,9 @@ class ResumeGenerationWorkflow:
             )
         LOGGER.info(
             "Generating resume: job_id=%s title=%s company=%s model=%s",
-            prospect.job_id,
-            prospect.title,
-            prospect.company,
+            job.job_id,
+            job.title,
+            job.company,
             prospect.resume_generation_model,
         )
         resolved_format = ResumeDocumentFormat.parse(document_format)
@@ -97,7 +97,7 @@ class ResumeGenerationWorkflow:
             candidate=candidate,
             knowledge=knowledge,
             job=job,
-            target_title=prospect.title,
+            target_title=job.title,
             model=prospect.resume_generation_model,
             document_format=resolved_format,
         )

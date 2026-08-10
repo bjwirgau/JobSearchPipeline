@@ -8,8 +8,10 @@ from zipfile import is_zipfile
 
 try:
     from docx import Document
+    from docx.enum.text import WD_TAB_ALIGNMENT
 except ImportError:
     Document = None
+    WD_TAB_ALIGNMENT = None
 
 from models import CandidateProfile, GeneratedResumeContent, ResumeKnowledgeBase
 from services import ResumeDocxRenderer
@@ -135,6 +137,28 @@ class ResumeDocxRendererTests(unittest.TestCase):
             document.core_properties.title,
             "Example Candidate - Senior Data Engineer Resume",
         )
+        bold_runs = [
+            run.text
+            for paragraph in document.paragraphs
+            for run in paragraph.runs
+            if run.bold is True
+        ]
+        self.assertEqual(bold_runs, ["Data Engineer"])
+        self.assertFalse(document.styles["Title"].font.bold)
+        self.assertFalse(document.styles["Heading 1"].font.bold)
+        experience_heading = next(
+            paragraph
+            for paragraph in document.paragraphs
+            if paragraph.text.startswith("Data Engineer")
+        )
+        self.assertEqual(
+            experience_heading.text.splitlines()[0],
+            "Data Engineer\tJanuary 2022 – Present",
+        )
+        tab_stops = list(experience_heading.paragraph_format.tab_stops)
+        self.assertEqual(len(tab_stops), 1)
+        self.assertEqual(tab_stops[0].alignment, WD_TAB_ALIGNMENT.RIGHT)
+        self.assertAlmostEqual(tab_stops[0].position.inches, 7.2, places=2)
         self.assertAlmostEqual(document.sections[0].top_margin.inches, 0.55, places=2)
 
 

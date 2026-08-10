@@ -250,7 +250,7 @@ class JobProspectRepository:
         with self._database.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT job_id, job_data
+                SELECT job_id, title, job_data
                 FROM job_prospects
                 WHERE job_id = %s
                 """,
@@ -264,6 +264,10 @@ class JobProspectRepository:
             payload = json.loads(payload)
         if not isinstance(payload, dict):
             raise TypeError("job_data must contain a JSON object")
+        description_title = payload.get("title")
+        if not isinstance(description_title, str) or not description_title.strip():
+            payload = dict(payload)
+            payload["title"] = row["title"]
         return JobPosting.from_dict(payload)
 
     def list_ranked(self, *, limit: int = 100) -> tuple[JobProspect, ...]:

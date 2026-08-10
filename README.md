@@ -49,6 +49,7 @@ The resume knowledge base turns resume facts into validated JSON that matching c
   "website_url": "https://example.dev",
   "location": "Denver, CO",
   "skills": ["Magento", "PHP", "Laravel", "React", "MySQL", "AWS"],
+  "additional_keywords": ["Technical Leadership", "Cross-functional Collaboration"],
   "years": {
     "PHP": 10,
     "Magento": 10,
@@ -89,6 +90,11 @@ structured roles, achievements, certifications, and education as factual evidenc
 Older profiles containing strings for achievements, certifications, or education
 remain supported. A skill present only in `years` remains available to matching
 through the combined `all_skills` view.
+
+`additional_keywords` provides optional, candidate-approved terms for resume
+generation. The model may include a configured term when it is relevant to the target
+job, but it is instructed not to force every term into the resume. These keywords do
+not change job-search or matching criteria.
 
 The knowledge layer includes:
 
@@ -272,11 +278,16 @@ Word styles rather than converted from browser CSS. Candidate contact details ar
 added locally and are not included in the model request. The prompt also excludes
 the raw scraper payload and local source-resume path.
 
-The rendered professional summary begins with the exact title stored in
-`job_prospects.title`, rather than a title from the candidate profile or the
-normalized job payload. Resume role and certification dates must include month
-precision using `YYYY-MM` or `Month YYYY`; both renderers display them consistently
-as `Month YYYY`. `Present` is accepted for a role's end date.
+The resume-generation LLM inspects the narrative summary inside the normalized job
+description and returns `target_title` only when that summary explicitly declares a
+title. The application verifies that the exact returned phrase occurs in the
+description before using it. Otherwise, it falls back to the original normalized job
+title, which itself falls back to `job_prospects.title` when missing. Candidate-profile
+titles are not used. Resume role and certification dates must include month precision
+using `YYYY-MM` or `Month YYYY`; both renderers display them consistently as
+`Month YYYY`. `Present` is accepted for a role's end date. Bold lettering is reserved
+for job titles in the Professional Experience section. In DOCX output, each experience
+date range is right-aligned across from its job title.
 
 Generated `.html` and `.docx` files are written to
 `JOB_AGENT_GENERATED_DOCUMENTS` (default: `data/generated_documents`) and are

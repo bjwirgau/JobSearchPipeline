@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -36,8 +37,9 @@ CANDIDATE\n{candidate_profile}\nKNOWLEDGE\n{resume_knowledge}\nJOB\n{job_posting
 
 
 class StaticResumeGenerator:
-    def __init__(self) -> None:
+    def __init__(self, *, target_title: str | None = None) -> None:
         self.calls: list[tuple[str, str]] = []
+        self.target_title = target_title
 
     async def generate_resume(
         self,
@@ -47,8 +49,9 @@ class StaticResumeGenerator:
     ) -> Mapping[str, Any]:
         self.calls.append((prompt, model))
         return {
+            "target_title": self.target_title,
             "professional_summary": "Builds reliable data platforms.",
-            "skills": ["Python", "SQL"],
+            "skills": ["Python", "SQL", "Data Warehousing"],
             "experience": [
                 {
                     "company": "Example Corp",
@@ -103,6 +106,7 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             website_url="https://example.dev",
             summary="Original Senior Software Engineer summary.",
             skills=("Python", "SQL"),
+            additional_keywords=("Data Warehousing",),
             resume_path="/private/source-resume.pdf",
         )
         self.knowledge = ResumeKnowledgeBase.from_dict(
@@ -157,8 +161,10 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
     def _workflow(
         self,
         directory: str,
+        *,
+        target_title: str | None = None,
     ) -> tuple[ResumeGenerationWorkflow, StaticResumeGenerator]:
-        generator = StaticResumeGenerator()
+        generator = StaticResumeGenerator(target_title=target_title)
         workflow = ResumeGenerationWorkflow(
             repository=self.repository,
             agent=ResumeGenerationAgent(
@@ -207,6 +213,9 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("github.com/example-candidate", prompt)
             self.assertNotIn("example.dev", prompt)
             self.assertNotIn("Original Senior Software Engineer summary.", prompt)
+            self.assertIn('"additional_keywords": [', prompt)
+            self.assertIn('"Data Warehousing"', prompt)
+            self.assertIn('"original_title": "Senior Data Engineer"', prompt)
             self.assertIn("Target Company", prompt)
             self.assertIn("Built a supported pipeline.", prompt)
             self.assertNotIn("/private/source-resume.pdf", prompt)
@@ -226,7 +235,7 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("github.com/example-candidate", html)
             self.assertIn("example.dev", html)
             self.assertIn(
-                '<strong class="summary-title">Senior Data Engineer</strong>'
+                '<span class="summary-title">Senior Data Engineer</span>'
                 " — Builds reliable data platforms.",
                 html,
             )
@@ -234,12 +243,13 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Remote, US", html)
             self.assertIn("January 2022 – Present", html)
             self.assertIn("Built a supported pipeline.", html)
+            self.assertIn("Data Warehousing", html)
             self.assertIn("Improved platform reliability.", html)
             self.assertIn("Bachelor of Science in Computer Engineering", html)
             self.assertIn("Cloud Certification", html)
             self.assertIn("Issued January 2025", html)
 
-    async def test_uses_job_prospect_title_instead_of_normalized_title(self) -> None:
+    async def test_uses_job_description_title_before_job_prospect_title(self) -> None:
         self.repository.save_jobs((self.job,))
         prospect_title = "Principal Data Platform Engineer"
         self.repository.save(
@@ -269,17 +279,100 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.prospect.title, prospect_title)
             self.assertEqual(result.job.title, self.job.title)
             prompt, _ = generator.calls[0]
-            self.assertIn(f'"title": "{prospect_title}"', prompt)
-            self.assertNotIn(f'"title": "{self.job.title}"', prompt)
+            self.assertIn(f'"original_title": "{self.job.title}"', prompt)
+            self.assertNotIn(f'"original_title": "{prospect_title}"', prompt)
             html = Path(result.artifact.path).read_text(encoding="utf-8")
             self.assertIn(
-                f'<strong class="summary-title">{prospect_title}</strong>',
+                f'<span class="summary-title">{self.job.title}</span>',
                 html,
             )
             self.assertNotIn(
-                f'<strong class="summary-title">{self.job.title}</strong>',
+                f'<span class="summary-title">{prospect_title}</span>',
                 html,
             )
+
+    async def test_uses_llm_title_declared_in_job_summary(self) -> None:
+        summary_title = "Lead Data Platform Engineer"
+        job = replace(
+            self.job,
+            description=(
+                "Job Summary\n"
+                f"We are seeking a {summary_title} to build reliable data products."
+            ),
+        )
+        self.repository.save_jobs((job,))
+        self.repository.update_matches(
+            (
+                MatchResult(
+                    candidate_id=self.candidate.candidate_id,
+                    job_id=job.job_id,
+                    score=0.9,
+                    breakdown=MatchBreakdown(
+                        skills=0.9,
+                        title=0.9,
+                        location=0.9,
+                        experience=0.9,
+                    ),
+                ),
+            )
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            workflow, _ = self._workflow(
+                directory,
+                target_title=summary_title,
+            )
+
+            result = await workflow.run(
+                job_id=job.job_id,
+                candidate=self.candidate,
+                knowledge=self.knowledge,
+            )
+
+            html = Path(result.artifact.path).read_text(encoding="utf-8")
+            self.assertIn(
+                f'<span class="summary-title">{summary_title}</span>',
+                html,
+            )
+            self.assertNotIn(
+                f'<span class="summary-title">{job.title}</span>',
+                html,
+            )
+
+    async def test_rejects_llm_title_not_declared_in_job_description(self) -> None:
+        self.repository.save_jobs((self.job,))
+        self.repository.update_matches(
+            (
+                MatchResult(
+                    candidate_id=self.candidate.candidate_id,
+                    job_id=self.job.job_id,
+                    score=0.9,
+                    breakdown=MatchBreakdown(
+                        skills=0.9,
+                        title=0.9,
+                        location=0.9,
+                        experience=0.9,
+                    ),
+                ),
+            )
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            workflow, _ = self._workflow(
+                directory,
+                target_title="Invented Executive Title",
+            )
+
+            result = await workflow.run(
+                job_id=self.job.job_id,
+                candidate=self.candidate,
+                knowledge=self.knowledge,
+            )
+
+            html = Path(result.artifact.path).read_text(encoding="utf-8")
+            self.assertIn(
+                f'<span class="summary-title">{self.job.title}</span>',
+                html,
+            )
+            self.assertNotIn("Invented Executive Title", html)
 
     async def test_rejects_job_that_is_not_marked_for_generation(self) -> None:
         self.repository.save_jobs((self.job,))

@@ -112,10 +112,13 @@ class ResumeHTMLRendererTests(unittest.TestCase):
             document,
         )
         self.assertIn(
-            '<strong class="summary-title">Senior Data Engineer &lt;Lead&gt;</strong>'
+            '<span class="summary-title">Senior Data Engineer &lt;Lead&gt;</span>'
             " — Engineering &lt;script&gt;",
             document,
         )
+        self.assertIn('<h3 class="role-title">Data Engineer</h3>', document)
+        self.assertEqual(document.count("font-weight: 700;"), 1)
+        self.assertNotIn("<strong", document)
         self.assertIn("Remote, US", document)
         self.assertIn("January 2022 – Present", document)
         self.assertIn("Issued January 2025", document)

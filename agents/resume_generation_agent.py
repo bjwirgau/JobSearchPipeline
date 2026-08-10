@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from models import (
     CandidateProfile,
@@ -21,6 +22,7 @@ from services import (
 
 
 PROMPT_FIELDS = ("candidate_profile", "resume_knowledge", "job_posting")
+LOGGER = logging.getLogger(__name__)
 
 
 class ResumeGenerationAgent:
@@ -74,7 +76,12 @@ class ResumeGenerationAgent:
         content = GeneratedResumeContent.from_dict(response)
         content.validate_against(
             knowledge,
-            candidate_skills=candidate.skills,
+            candidate_skills=candidate.skills + candidate.additional_keywords,
+        )
+        rendered_target_title = self._resolve_target_title(
+            content.target_title,
+            description=job.description,
+            fallback=resolved_target_title,
         )
         resolved_format = ResumeDocumentFormat.parse(document_format)
         name = f"{candidate.candidate_id}-{job.job_id}"
@@ -83,7 +90,7 @@ class ResumeGenerationAgent:
             document = self._renderer.render(
                 candidate,
                 content,
-                target_title=resolved_target_title,
+                target_title=rendered_target_title,
             )
             artifacts.append(
                 self._documents.save_text(
@@ -97,7 +104,7 @@ class ResumeGenerationAgent:
             document = self._docx_renderer.render(
                 candidate,
                 content,
-                target_title=resolved_target_title,
+                target_title=rendered_target_title,
             )
             artifacts.append(
                 self._documents.save_bytes(
@@ -119,6 +126,7 @@ class ResumeGenerationAgent:
     ) -> str:
         candidate_evidence = {
             "skills": list(candidate.skills),
+            "additional_keywords": list(candidate.additional_keywords),
             "years_experience": candidate.years_experience,
         }
         resume_evidence = {
@@ -133,7 +141,7 @@ class ResumeGenerationAgent:
             "education": [value.to_dict() for value in knowledge.education],
         }
         job_evidence = {
-            "title": target_title,
+            "original_title": target_title,
             "company": job.company,
             "location": job.location,
             "description": job.description,
@@ -156,3 +164,22 @@ class ResumeGenerationAgent:
                 json.dumps(value, indent=2, ensure_ascii=False, sort_keys=True),
             )
         return rendered
+
+    @staticmethod
+    def _resolve_target_title(
+        parsed_title: str | None,
+        *,
+        description: str,
+        fallback: str,
+    ) -> str:
+        if parsed_title is None:
+            return fallback
+        title = " ".join(parsed_title.split())
+        collapsed_description = " ".join(description.split())
+        if title.casefold() not in collapsed_description.casefold():
+            LOGGER.warning(
+                "Ignoring resume title not found in job description: %s",
+                title,
+            )
+            return fallback
+        return title
