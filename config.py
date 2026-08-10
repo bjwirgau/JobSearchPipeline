@@ -127,6 +127,11 @@ class Settings:
     resume_generation_prompt_path: Path = (
         PROJECT_ROOT / "prompts" / "generate_resume.txt"
     )
+    application_browser_enabled: bool = False
+    application_browser_headless: bool = False
+    application_browser_timeout_seconds: float = 30.0
+    application_max_steps: int = 10
+    application_prompt_path: Path = PROJECT_ROOT / "prompts" / "fill_application.txt"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
@@ -277,6 +282,25 @@ class Settings:
                 ),
                 PROJECT_ROOT,
             ),
+            application_browser_enabled=_as_bool(
+                values.get("JOB_AGENT_APPLICATION_BROWSER_ENABLED")
+            ),
+            application_browser_headless=_as_bool(
+                values.get("JOB_AGENT_APPLICATION_BROWSER_HEADLESS")
+            ),
+            application_browser_timeout_seconds=float(
+                values.get("JOB_AGENT_APPLICATION_BROWSER_TIMEOUT_SECONDS", "30")
+            ),
+            application_max_steps=int(
+                values.get("JOB_AGENT_APPLICATION_MAX_STEPS", "10")
+            ),
+            application_prompt_path=_resolve_path(
+                values.get(
+                    "JOB_AGENT_APPLICATION_PROMPT",
+                    "prompts/fill_application.txt",
+                ),
+                PROJECT_ROOT,
+            ),
         )
 
     def __post_init__(self) -> None:
@@ -353,6 +377,12 @@ class Settings:
             raise ValueError(
                 "JOB_AGENT_RESUME_GENERATION_BATCH_FORMAT must be html, docx, or both"
             )
+        if self.application_browser_timeout_seconds <= 0:
+            raise ValueError(
+                "JOB_AGENT_APPLICATION_BROWSER_TIMEOUT_SECONDS must be greater than zero"
+            )
+        if not 1 <= self.application_max_steps <= GEMINI_MAX_REQUESTS_PER_RUN:
+            raise ValueError("JOB_AGENT_APPLICATION_MAX_STEPS must be between 1 and 15")
         if bool(self.adzuna_app_id) != bool(self.adzuna_app_key):
             raise ValueError(
                 "JOB_AGENT_ADZUNA_APP_ID and JOB_AGENT_ADZUNA_APP_KEY must be set together"

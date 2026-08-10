@@ -6,6 +6,11 @@ from .application import (
     ApplicationValidation,
     DocumentArtifact,
 )
+from .application_form import (
+    ApplicationFieldKind,
+    ApplicationFillResult,
+    ApplicationFormField,
+)
 from .candidate import CandidateProfile
 from .crawl_discovery_cursor import CrawlDiscoveryCursor
 from .company_prospect import CompanyProspect
@@ -40,6 +45,9 @@ from .workflow import StageRecord, WorkflowRun, WorkflowStage, WorkflowStatus
 
 __all__ = [
     "Application",
+    "ApplicationFieldKind",
+    "ApplicationFillResult",
+    "ApplicationFormField",
     "ApplicationStatus",
     "ApplicationValidation",
     "CandidateProfile",

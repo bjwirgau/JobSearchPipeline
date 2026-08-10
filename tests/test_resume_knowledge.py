@@ -61,6 +61,7 @@ class ResumeKnowledgeTests(unittest.TestCase):
                         "github_url": "https://github.com/example",
                         "website_url": "https://example.dev",
                         "additional_keywords": ["Technical Leadership"],
+                        "application_answers": {"Require sponsorship?": "No"},
                         "skills": ["PHP"],
                         "desired_titles": ["Backend Engineer"],
                     }
@@ -89,6 +90,10 @@ class ResumeKnowledgeTests(unittest.TestCase):
                 stored["additional_keywords"], ["Technical Leadership"]
             )
             self.assertEqual(stored["desired_titles"], ["Backend Engineer"])
+            self.assertEqual(
+                stored["application_answers"],
+                {"Require sponsorship?": "No"},
+            )
             self.assertEqual(stored["skills"], ["PHP", "React"])
             self.assertEqual(stored["years"], {"PHP": 10.0})
 
@@ -121,6 +126,10 @@ class ResumeKnowledgeTests(unittest.TestCase):
         self.assertEqual(
             candidate.additional_keywords,
             tuple(payload.get("additional_keywords", ())),
+        )
+        self.assertEqual(
+            dict(candidate.application_answers),
+            payload.get("application_answers", {}),
         )
         self.assertEqual(candidate.skills, knowledge.skills)
         self.assertIn("Magento", knowledge.all_skills)

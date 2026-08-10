@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any, Mapping
 
 
@@ -24,6 +25,10 @@ class CandidateProfile:
     github_url: str = ""
     website_url: str = ""
     additional_keywords: tuple[str, ...] = ()
+    application_answers: Mapping[str, str] = field(
+        default_factory=dict,
+        repr=False,
+    )
 
     def __post_init__(self) -> None:
         for field_name in ("candidate_id", "full_name", "email"):
@@ -46,6 +51,16 @@ class CandidateProfile:
                 field_name,
                 tuple(value.strip() for value in getattr(self, field_name) if value.strip()),
             )
+        answers: dict[str, str] = {}
+        for question, answer in self.application_answers.items():
+            if not isinstance(question, str) or not isinstance(answer, str):
+                raise TypeError("application_answers keys and values must be strings")
+            cleaned_question = question.strip()
+            cleaned_answer = answer.strip()
+            if not cleaned_question or not cleaned_answer:
+                raise ValueError("application_answers must not contain empty values")
+            answers[cleaned_question] = cleaned_answer
+        object.__setattr__(self, "application_answers", MappingProxyType(answers))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -65,6 +80,7 @@ class CandidateProfile:
             "linkedin_url": self.linkedin_url,
             "github_url": self.github_url,
             "website_url": self.website_url,
+            "application_answers": dict(self.application_answers),
         }
 
     @classmethod
@@ -90,4 +106,5 @@ class CandidateProfile:
             github_url=str(github_url) if github_url is not None else "",
             website_url=str(website_url) if website_url is not None else "",
             additional_keywords=tuple(value.get("additional_keywords", ())),
+            application_answers=dict(value.get("application_answers", {})),
         )

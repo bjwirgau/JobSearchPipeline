@@ -89,6 +89,10 @@ class CountryEligibilityTests(unittest.TestCase):
                 "JOB_AGENT_RESUME_GENERATION_MAX_OUTPUT_TOKENS": "5000",
                 "JOB_AGENT_RESUME_GENERATION_BATCH_LIMIT": "3",
                 "JOB_AGENT_RESUME_GENERATION_BATCH_FORMAT": "both",
+                "JOB_AGENT_APPLICATION_BROWSER_ENABLED": "true",
+                "JOB_AGENT_APPLICATION_BROWSER_HEADLESS": "true",
+                "JOB_AGENT_APPLICATION_BROWSER_TIMEOUT_SECONDS": "20",
+                "JOB_AGENT_APPLICATION_MAX_STEPS": "5",
             }
         )
 
@@ -103,6 +107,10 @@ class CountryEligibilityTests(unittest.TestCase):
         self.assertEqual(settings.resume_generation_max_output_tokens, 5000)
         self.assertEqual(settings.resume_generation_batch_limit, 3)
         self.assertEqual(settings.resume_generation_batch_format, "both")
+        self.assertTrue(settings.application_browser_enabled)
+        self.assertTrue(settings.application_browser_headless)
+        self.assertEqual(settings.application_browser_timeout_seconds, 20)
+        self.assertEqual(settings.application_max_steps, 5)
         self.assertNotIn("secret", repr(settings))
         with self.assertRaisesRegex(ValueError, "MATCHING_CONCURRENCY"):
             Settings.from_env({"JOB_AGENT_MATCHING_CONCURRENCY": "21"})
@@ -120,6 +128,10 @@ class CountryEligibilityTests(unittest.TestCase):
             Settings.from_env({"JOB_AGENT_RESUME_GENERATION_BATCH_LIMIT": "101"})
         with self.assertRaisesRegex(ValueError, "RESUME_GENERATION_BATCH_FORMAT"):
             Settings.from_env({"JOB_AGENT_RESUME_GENERATION_BATCH_FORMAT": "pdf"})
+        with self.assertRaisesRegex(ValueError, "APPLICATION_BROWSER_TIMEOUT_SECONDS"):
+            Settings.from_env({"JOB_AGENT_APPLICATION_BROWSER_TIMEOUT_SECONDS": "0"})
+        with self.assertRaisesRegex(ValueError, "APPLICATION_MAX_STEPS"):
+            Settings.from_env({"JOB_AGENT_APPLICATION_MAX_STEPS": "16"})
 
     def test_greenhouse_board_limit_is_validated(self) -> None:
         settings = Settings.from_env(

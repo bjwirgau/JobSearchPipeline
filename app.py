@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import logging
+import sys
 import textwrap
 from dataclasses import dataclass
 from datetime import timedelta
@@ -13,13 +14,21 @@ from pathlib import Path
 from typing import Sequence
 
 from agents import (
+    ApplicationFormAgent,
     CompanyCrawlerDisabledError,
     GreenhouseCompanyCrawler,
+    InvalidApplicationAnswerResponseError,
     MatchingAgent,
     ParserAgent,
     ResumeGenerationAgent,
     SearchAgent,
     SearchQueryBuilder,
+)
+from browser import (
+    ApplicationBrowserDependencyError,
+    ApplicationBrowserDisabledError,
+    ApplicationBrowserNavigationError,
+    SeleniumApplicationBrowser,
 )
 from config import Settings
 from database import Database, MySQLConfig, initialize_schema
@@ -48,6 +57,8 @@ from services import (
     GreenhouseCdxDiscovery,
     GreenhousePublicBoardLookup,
     LoggingNotificationService,
+    LLMNotConfiguredError,
+    LLMResponseError,
     MissingDocxDependencyError,
     MissingOpenAIDependencyError,
     OpenAIResumeConfig,
@@ -64,6 +75,11 @@ from services.http_service import HttpRequestError
 from services.job_sources import GreenhouseBoard, LinkedInJobSource
 from utils.logging import configure_logging
 from workflows import (
+    ApplicationFormNotFoundError,
+    ApplicationJobDataError,
+    ApplicationPreparationWorkflow,
+    ApplicationProspectNotFoundError,
+    ApplicationResumeNotFoundError,
     JobMatchingWorkflow,
     JobSearchWorkflow,
     ResumeBatchGenerationWorkflow,
@@ -88,6 +104,7 @@ class JobAgentContainer:
     job_matching_workflow: JobMatchingWorkflow
     resume_generation_workflow: ResumeGenerationWorkflow
     resume_batch_generation_workflow: ResumeBatchGenerationWorkflow
+    application_preparation_workflow: ApplicationPreparationWorkflow
 
 
 def build_container(
@@ -224,6 +241,10 @@ def build_container(
         repository=job_prospects,
         agent=resume_generation_agent,
     )
+    application_form_agent = ApplicationFormAgent(
+        llm=llm,
+        prompt_template=settings.application_prompt_path.read_text(encoding="utf-8"),
+    )
     return JobAgentContainer(
         settings=settings,
         database=database,
@@ -251,6 +272,18 @@ def build_container(
             repository=job_prospects,
             resume_generation=resume_generation_workflow,
         ),
+        application_preparation_workflow=ApplicationPreparationWorkflow(
+            repository=job_prospects,
+            form_agent=application_form_agent,
+            browser=SeleniumApplicationBrowser(
+                enabled=settings.application_browser_enabled,
+                headless=settings.application_browser_headless,
+                timeout_seconds=settings.application_browser_timeout_seconds,
+                user_agent=settings.http_user_agent,
+            ),
+            generated_documents_dir=settings.generated_documents_dir,
+            max_steps=settings.application_max_steps,
+        ),
     )
 
 
@@ -275,6 +308,11 @@ def _arguments(
         "--generate-matched-resumes",
         action="store_true",
         help="generate resumes for matched candidates without a stored filename",
+    )
+    parser.add_argument(
+        "--prepare-application",
+        metavar="JOB_ID",
+        help="fill one generated-resume job application and stop before submission",
     )
     parser.add_argument(
         "--resume-format",
@@ -363,13 +401,14 @@ def _arguments(
             arguments.match_prospects,
             bool(arguments.generate_resume),
             arguments.generate_matched_resumes,
+            bool(arguments.prepare_application),
             arguments.crawl_greenhouse_companies,
         )
     )
     if selected_commands > 1:
         parser.error(
             "--search, --match-prospects, --generate-resume, "
-            "--generate-matched-resumes, and "
+            "--generate-matched-resumes, --prepare-application, and "
             "--crawl-greenhouse-companies "
             "cannot be combined"
         )
@@ -768,6 +807,78 @@ async def _run_matched_resume_generation(
     return 0 if not result.failures else 1
 
 
+async def _run_application_preparation(
+    container: JobAgentContainer,
+    *,
+    job_id: str,
+) -> int:
+    if not container.settings.gemini_api_key:
+        logging.getLogger(__name__).error(
+            "Application form filling requires GEMINI_API_KEY to be configured"
+        )
+        return 1
+    try:
+        candidate = _load_candidate(container.settings.candidate_profile_path)
+        knowledge = container.resume_knowledge_service.load()
+        result = await container.application_preparation_workflow.run(
+            job_id=job_id,
+            candidate=candidate,
+            knowledge=knowledge,
+        )
+    except (
+        ApplicationBrowserDependencyError,
+        ApplicationBrowserDisabledError,
+        ApplicationBrowserNavigationError,
+        ApplicationFormNotFoundError,
+        ApplicationJobDataError,
+        ApplicationProspectNotFoundError,
+        ApplicationResumeNotFoundError,
+        InvalidApplicationAnswerResponseError,
+        LLMNotConfiguredError,
+        LLMResponseError,
+        ResumeKnowledgeError,
+        OSError,
+        TypeError,
+        ValueError,
+    ) as error:
+        logging.getLogger(__name__).error(
+            "Application preparation failed: %s",
+            error,
+        )
+        return 1
+
+    print(f"Prepared application for {result.job.title} at {result.job.company}.")
+    print(f"Job ID: {result.job.job_id}")
+    print(f"Page: {result.session.current_url}")
+    print(f"Resume: {result.resume_path.name}")
+    print(f"Steps completed: {result.steps_completed}")
+    print(f"Fields filled: {len(result.filled_field_ids)}")
+    print(f"Resume uploaded: {'yes' if result.resume_uploaded else 'no'}")
+    print(
+        "Submission controls disabled: "
+        f"{result.submission_controls_disabled}"
+    )
+    for field in result.unresolved_fields:
+        requirement = "required" if field.required else "optional"
+        print(f"Unresolved ({requirement}): {field.label}")
+    for failure in result.failures:
+        print(f"Failure: {failure}")
+    print("No application submission action was performed.")
+
+    try:
+        if (
+            not container.settings.application_browser_headless
+            and sys.stdin.isatty()
+        ):
+            input(
+                "Review the populated browser form. Submission is disabled; "
+                "press Enter to close the browser..."
+            )
+    finally:
+        result.session.close()
+    return 0 if result.complete else 1
+
+
 async def _run_company_crawl(
     container: JobAgentContainer,
     *,
@@ -862,6 +973,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                     arguments.resume_format
                     or settings.resume_generation_batch_format
                 ),
+            )
+        )
+    if arguments.prepare_application:
+        return asyncio.run(
+            _run_application_preparation(
+                container,
+                job_id=arguments.prepare_application,
             )
         )
     if arguments.search:

@@ -2,7 +2,9 @@
 
 Job Agent is a review-first Python pipeline for finding relevant roles, evaluating fit, preparing truthful application materials, and tracking application state.
 
-Phase 3 adds criteria-based job discovery and normalized search results to the resume-aware foundation. Application submission remains disabled and review-first.
+Phase 3 adds criteria-based job discovery and normalized search results to the
+resume-aware foundation. Selenium can prepare a generated-resume application
+for review, but application submission remains disabled.
 
 ## Pipeline
 
@@ -16,7 +18,7 @@ Search → Normalize → Parse → Score → Review → Tailor → Apply → Tra
 - **Score:** use structured, evidence-grounded LLM output to assess fit and qualification gaps.
 - **Review:** require a person to select and approve an opportunity.
 - **Tailor:** create local resume guidance and a cover-letter draft using known facts.
-- **Apply:** validate the application and hand it to a configured submission gateway.
+- **Apply:** populate an application for human review while keeping submission disabled.
 - **Track:** persist scored job prospects and workflow events.
 
 ## Phase 1 Features
@@ -50,6 +52,9 @@ The resume knowledge base turns resume facts into validated JSON that matching c
   "location": "Denver, CO",
   "skills": ["Magento", "PHP", "Laravel", "React", "MySQL", "AWS"],
   "additional_keywords": ["Technical Leadership", "Cross-functional Collaboration"],
+  "application_answers": {
+    "Will you require employment sponsorship?": "No"
+  },
   "years": {
     "PHP": 10,
     "Magento": 10,
@@ -95,6 +100,13 @@ through the combined `all_skills` view.
 generation. The model may include a configured term when it is relevant to the target
 job, but it is instructed not to force every term into the resume. These keywords do
 not change job-search or matching criteria.
+
+`application_answers` contains candidate-approved facts for questions that must
+not be guessed, such as work authorization, sponsorship, availability,
+compensation expectations, voluntary demographic responses, consent, or a legal
+signature. Use the application question as the key and the intended form answer
+as the value. Leave the mapping empty until every configured answer has been
+reviewed for accuracy.
 
 The knowledge layer includes:
 
@@ -307,6 +319,63 @@ After a successful write, the application stores the generated file's basename
 in `job_prospects.resume_file_name`. For `--resume-format both`, the DOCX
 filename is stored. A null filename represents a queued generation candidate;
 failed attempts stay null and can be retried.
+
+### Prepare an application without submitting it
+
+Install Selenium and ensure Google Chrome is available on the machine where the
+interactive review will occur:
+
+```bash
+python3 -m pip install -e '.[browser]'
+```
+
+Configure the review-only browser and Gemini form-answer agent in `.env`:
+
+```env
+GEMINI_API_KEY=your-api-key
+JOB_AGENT_APPLICATION_BROWSER_ENABLED=true
+JOB_AGENT_APPLICATION_BROWSER_HEADLESS=false
+JOB_AGENT_APPLICATION_BROWSER_TIMEOUT_SECONDS=30
+JOB_AGENT_APPLICATION_MAX_STEPS=10
+JOB_AGENT_APPLICATION_PROMPT=prompts/fill_application.txt
+```
+
+Select a prospect that already has a generated resume:
+
+```sql
+SELECT job_id, title, company, url, resume_file_name
+FROM job_prospects
+WHERE resume_file_name IS NOT NULL
+ORDER BY `match` DESC;
+```
+
+Open and prepare its application:
+
+```bash
+python3 app.py --prepare-application JOB_ID
+```
+
+The command opens the stored job URL in Chrome, follows a visible external
+**Apply** link when needed, discovers native fields in the page and embedded
+frames, fills contact details locally, asks Gemini for evidence-grounded answers
+to remaining questions, and uploads the exact file named by
+`job_prospects.resume_file_name`. Safe **Next**, **Continue**, and review steps
+are supported up to the configured limit. The stored application resume must be
+a DOCX or PDF; regenerate an HTML-only resume with `--resume-format docx` first.
+
+Protected demographic data, disability and veteran status, work authorization,
+sponsorship, salary expectations, availability, consent, and signatures are
+never inferred. Add reviewed values to `application_answers` when those fields
+should be populated. Unsupported fields remain visible and are reported as
+unresolved instead of being fabricated.
+
+The workflow never calls the submission agent, never sends Enter keystrokes,
+never clicks a final submit control, and disables recognized final submission
+controls on every discovered step. In an interactive terminal, Chrome remains
+open for review until Enter is pressed in the terminal; that Enter closes the
+browser rather than submitting the form. CAPTCHA, login, shadow-DOM widgets,
+and site-specific controls may require manual handling. No application status
+is persisted yet, and job-board terms still apply.
 
 ### Enable and Configure Job Searching
 
@@ -790,7 +859,9 @@ Live search is disabled by default:
 JOB_AGENT_SEARCH_ENABLED=false
 ```
 
-Enabling the flag alone does not configure an external source or browser runtime. Application agents remain scaffolded for a later phase, but the current application container and database do not persist application state.
+Enabling the search flag alone does not enable the separate Selenium application
+browser. Application preparation is opt-in and the current database does not
+persist application state.
 
 ## Project Structure
 
@@ -808,7 +879,7 @@ Enabling the flag alone does not configure an external source or browser runtime
 ├── repositories/                  # Persistence interfaces and MySQL implementations
 ├── database/                      # Connection, schema, and migration files
 ├── prompts/                       # Reusable LLM prompt templates
-├── browser/                       # Guarded form planning and platform adapters
+├── browser/                       # Selenium review filling and platform adapters
 ├── evaluations/                   # Offline quality metrics and datasets
 ├── api/                           # Optional HTTP API
 ├── utils/                         # Date, text, hashing, and logging helpers
@@ -947,9 +1018,10 @@ python3 -m unittest discover -s ./tests -p 'test_*.py' -v
 ```
 
 The suite covers resume knowledge, parsing, structured LLM matching, single-job
-and queued resume generation, MySQL job-prospect persistence, the search safety
-flag, and fixture-based normalization for every Phase 3 source without making network or
-live-database requests. LLM and repository tests use injected fakes; use a
+and queued resume generation, review-only application filling, MySQL
+job-prospect persistence, the search safety flag, and fixture-based
+normalization for every Phase 3 source without making network or live-database
+requests. LLM, Selenium, and repository tests use injected fakes; use a
 separate integration environment to validate API credentials, model access,
 database credentials, and server permissions.
 
@@ -975,4 +1047,7 @@ python3 -m pip install -e '.[api]'
 
 ## Next Phase
 
-The next phase can add source health telemetry, pagination checkpoints, evidence links, and a review interface. Live application automation should remain out of scope until application persistence, validation, approval auditing, and platform-specific dry runs are reliable.
+The next phase can add source health telemetry, pagination checkpoints, evidence
+links, application audit persistence, platform-specific form adapters, and a
+review interface. Final submission should remain out of scope until validation,
+approval auditing, and site-specific dry runs are reliable.

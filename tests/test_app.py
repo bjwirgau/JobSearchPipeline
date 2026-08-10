@@ -245,6 +245,21 @@ class ApplicationCriteriaTests(unittest.TestCase):
             )
         self.assertIn("between 1 and 100", errors.getvalue())
 
+    def test_application_preparation_is_a_separate_command(self) -> None:
+        arguments = _arguments(
+            ["--prepare-application", "job-123"],
+            settings=self.settings,
+        )
+
+        self.assertEqual(arguments.prepare_application, "job-123")
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            _arguments(
+                ["--prepare-application", "job-123", "--search"],
+                settings=self.settings,
+            )
+        self.assertIn("cannot be combined", errors.getvalue())
+
     def test_greenhouse_board_limit_is_configurable_and_validated(self) -> None:
         arguments = _arguments(
             ["--search", "--greenhouse-board-limit", "10"],
