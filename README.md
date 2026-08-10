@@ -268,11 +268,11 @@ Word styles rather than converted from browser CSS. Candidate contact details ar
 added locally and are not included in the model request. The prompt also excludes
 the raw scraper payload and local source-resume path.
 
-The rendered professional summary begins with the job prospect's exact normalized
-title, ensuring that its title matches the target job. Resume role and certification
-dates must include month precision using `YYYY-MM` or `Month YYYY`; both renderers
-display them consistently as `Month YYYY`. `Present` is accepted for a role's end
-date.
+The rendered professional summary begins with the exact title stored in
+`job_prospects.title`, rather than a title from the candidate profile or the
+normalized job payload. Resume role and certification dates must include month
+precision using `YYYY-MM` or `Month YYYY`; both renderers display them consistently
+as `Month YYYY`. `Present` is accepted for a role's end date.
 
 Generated `.html` and `.docx` files are written to
 `JOB_AGENT_GENERATED_DOCUMENTS` (default: `data/generated_documents`) and are

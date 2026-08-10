@@ -53,6 +53,7 @@ class ResumeGenerationAgent:
         candidate: CandidateProfile,
         knowledge: ResumeKnowledgeBase,
         job: JobPosting,
+        target_title: str,
         model: str,
         document_format: ResumeDocumentFormat | str = ResumeDocumentFormat.HTML,
     ) -> tuple[DocumentArtifact, ...]:
@@ -60,7 +61,15 @@ class ResumeGenerationAgent:
             raise ValueError(
                 "candidate profile and resume knowledge must have the same candidate_id"
             )
-        prompt = self._render_prompt(candidate, knowledge, job)
+        resolved_target_title = target_title.strip()
+        if not resolved_target_title:
+            raise ValueError("target resume title must not be empty")
+        prompt = self._render_prompt(
+            candidate,
+            knowledge,
+            job,
+            target_title=resolved_target_title,
+        )
         response = await self._generator.generate_resume(prompt, model=model)
         content = GeneratedResumeContent.from_dict(response)
         content.validate_against(
@@ -74,7 +83,7 @@ class ResumeGenerationAgent:
             document = self._renderer.render(
                 candidate,
                 content,
-                target_title=job.title,
+                target_title=resolved_target_title,
             )
             artifacts.append(
                 self._documents.save_text(
@@ -88,7 +97,7 @@ class ResumeGenerationAgent:
             document = self._docx_renderer.render(
                 candidate,
                 content,
-                target_title=job.title,
+                target_title=resolved_target_title,
             )
             artifacts.append(
                 self._documents.save_bytes(
@@ -105,6 +114,8 @@ class ResumeGenerationAgent:
         candidate: CandidateProfile,
         knowledge: ResumeKnowledgeBase,
         job: JobPosting,
+        *,
+        target_title: str,
     ) -> str:
         candidate_evidence = {
             "skills": list(candidate.skills),
@@ -122,7 +133,7 @@ class ResumeGenerationAgent:
             "education": [value.to_dict() for value in knowledge.education],
         }
         job_evidence = {
-            "title": job.title,
+            "title": target_title,
             "company": job.company,
             "location": job.location,
             "description": job.description,

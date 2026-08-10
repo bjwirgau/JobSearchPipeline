@@ -230,6 +230,48 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Cloud Certification", html)
             self.assertIn("Issued January 2025", html)
 
+    async def test_uses_job_prospect_title_instead_of_normalized_title(self) -> None:
+        self.repository.save_jobs((self.job,))
+        prospect_title = "Principal Data Platform Engineer"
+        self.repository.save(
+            JobProspect(
+                job_id=self.job.job_id,
+                match=0.9,
+                title=prospect_title,
+                company=self.job.company,
+                location="Remote, US",
+                salary="Not provided",
+                source=self.job.source,
+                url=self.job.url,
+                resume_generation_checked=True,
+                resume_generation_candidate=True,
+                resume_generation_model="gpt-5.4",
+            )
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            workflow, generator = self._workflow(directory)
+
+            result = await workflow.run(
+                job_id=self.job.job_id,
+                candidate=self.candidate,
+                knowledge=self.knowledge,
+            )
+
+            self.assertEqual(result.prospect.title, prospect_title)
+            self.assertEqual(result.job.title, self.job.title)
+            prompt, _ = generator.calls[0]
+            self.assertIn(f'"title": "{prospect_title}"', prompt)
+            self.assertNotIn(f'"title": "{self.job.title}"', prompt)
+            html = Path(result.artifact.path).read_text(encoding="utf-8")
+            self.assertIn(
+                f'<strong class="summary-title">{prospect_title}</strong>',
+                html,
+            )
+            self.assertNotIn(
+                f'<strong class="summary-title">{self.job.title}</strong>',
+                html,
+            )
+
     async def test_rejects_job_that_is_not_marked_for_generation(self) -> None:
         self.repository.save_jobs((self.job,))
         with tempfile.TemporaryDirectory() as directory:
