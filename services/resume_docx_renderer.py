@@ -57,6 +57,15 @@ class ResumeDocxRenderer:
             contact_values.append(candidate.phone)
         if candidate.location:
             contact_values.append(candidate.location)
+        contact_values.extend(
+            url
+            for url in (
+                candidate.linkedin_url,
+                candidate.github_url,
+                candidate.website_url,
+            )
+            if url
+        )
         contact = document.add_paragraph(" • ".join(contact_values), style="Subtitle")
         contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
 

@@ -24,6 +24,9 @@ class ResumeDocxRendererTests(unittest.TestCase):
             email="candidate@example.com",
             phone="(555) 123-4567",
             location="Denver, CO",
+            linkedin_url="https://www.linkedin.com/in/example-candidate",
+            github_url="https://github.com/example-candidate",
+            website_url="https://example.dev",
             skills=("Python", "SQL"),
         )
         knowledge = ResumeKnowledgeBase.from_dict(
@@ -116,6 +119,9 @@ class ResumeDocxRendererTests(unittest.TestCase):
         self.assertIn("Example Candidate", text)
         self.assertIn("candidate@example.com", text)
         self.assertIn("(555) 123-4567", text)
+        self.assertIn("https://www.linkedin.com/in/example-candidate", text)
+        self.assertIn("https://github.com/example-candidate", text)
+        self.assertIn("https://example.dev", text)
         self.assertIn("Senior Data Engineer — Builds reliable data platforms.", text)
         self.assertIn("PROFESSIONAL EXPERIENCE", text)
         self.assertIn("Remote, US", text)

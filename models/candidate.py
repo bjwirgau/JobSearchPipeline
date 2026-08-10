@@ -20,6 +20,9 @@ class CandidateProfile:
     desired_locations: tuple[str, ...] = ()
     remote_preference: str = "flexible"
     resume_path: str | None = None
+    linkedin_url: str = ""
+    github_url: str = ""
+    website_url: str = ""
 
     def __post_init__(self) -> None:
         for field_name in ("candidate_id", "full_name", "email"):
@@ -27,7 +30,8 @@ class CandidateProfile:
             if not value:
                 raise ValueError(f"{field_name} must not be empty")
             object.__setattr__(self, field_name, value)
-        object.__setattr__(self, "phone", self.phone.strip())
+        for field_name in ("phone", "linkedin_url", "github_url", "website_url"):
+            object.__setattr__(self, field_name, getattr(self, field_name).strip())
         if self.years_experience < 0:
             raise ValueError("years_experience must not be negative")
         for field_name in ("skills", "desired_titles", "desired_locations"):
@@ -51,11 +55,17 @@ class CandidateProfile:
             "desired_locations": list(self.desired_locations),
             "remote_preference": self.remote_preference,
             "resume_path": self.resume_path,
+            "linkedin_url": self.linkedin_url,
+            "github_url": self.github_url,
+            "website_url": self.website_url,
         }
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "CandidateProfile":
         phone = value.get("phone")
+        linkedin_url = value.get("linkedin_url")
+        github_url = value.get("github_url")
+        website_url = value.get("website_url")
         return cls(
             candidate_id=str(value["candidate_id"]),
             full_name=str(value["full_name"]),
@@ -69,4 +79,7 @@ class CandidateProfile:
             desired_locations=tuple(value.get("desired_locations", ())),
             remote_preference=str(value.get("remote_preference", "flexible")),
             resume_path=value.get("resume_path"),
+            linkedin_url=str(linkedin_url) if linkedin_url is not None else "",
+            github_url=str(github_url) if github_url is not None else "",
+            website_url=str(website_url) if website_url is not None else "",
         )

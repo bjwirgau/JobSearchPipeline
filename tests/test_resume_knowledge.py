@@ -57,6 +57,9 @@ class ResumeKnowledgeTests(unittest.TestCase):
                         "full_name": "Example Candidate",
                         "email": "candidate@example.com",
                         "phone": "(555) 123-4567",
+                        "linkedin_url": "https://linkedin.com/in/example",
+                        "github_url": "https://github.com/example",
+                        "website_url": "https://example.dev",
                         "skills": ["PHP"],
                         "desired_titles": ["Backend Engineer"],
                     }
@@ -76,6 +79,11 @@ class ResumeKnowledgeTests(unittest.TestCase):
             stored = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(stored["full_name"], "Example Candidate")
             self.assertEqual(stored["phone"], "(555) 123-4567")
+            self.assertEqual(
+                stored["linkedin_url"], "https://linkedin.com/in/example"
+            )
+            self.assertEqual(stored["github_url"], "https://github.com/example")
+            self.assertEqual(stored["website_url"], "https://example.dev")
             self.assertEqual(stored["desired_titles"], ["Backend Engineer"])
             self.assertEqual(stored["skills"], ["PHP", "React"])
             self.assertEqual(stored["years"], {"PHP": 10.0})
@@ -103,6 +111,9 @@ class ResumeKnowledgeTests(unittest.TestCase):
 
         self.assertEqual(candidate.candidate_id, knowledge.candidate_id)
         self.assertEqual(candidate.phone, payload.get("phone", ""))
+        self.assertEqual(candidate.linkedin_url, payload.get("linkedin_url", ""))
+        self.assertEqual(candidate.github_url, payload.get("github_url", ""))
+        self.assertEqual(candidate.website_url, payload.get("website_url", ""))
         self.assertEqual(candidate.skills, knowledge.skills)
         self.assertIn("Magento", knowledge.all_skills)
         self.assertEqual(knowledge.years_for("Magento"), 10)

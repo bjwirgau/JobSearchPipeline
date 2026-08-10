@@ -44,6 +44,9 @@ The resume knowledge base turns resume facts into validated JSON that matching c
   "full_name": "Example Candidate",
   "email": "candidate@example.com",
   "phone": "",
+  "linkedin_url": "https://www.linkedin.com/in/example-candidate",
+  "github_url": "https://github.com/example-candidate",
+  "website_url": "https://example.dev",
   "location": "Denver, CO",
   "skills": ["Magento", "PHP", "Laravel", "React", "MySQL", "AWS"],
   "years": {
@@ -98,9 +101,10 @@ The knowledge layer includes:
 
 `CandidateProfile` and `ResumeKnowledgeBase` read separate validated views from this one JSON file. When resume knowledge is saved, identity and job-preference fields are preserved.
 
-Set `phone` in `data/candidate_profile.json` to include it in generated resume
-contact details. An empty value omits it. Candidate name, email, phone, and location
-are inserted locally and are not sent to the resume-generation model.
+Set `phone`, `linkedin_url`, `github_url`, and `website_url` in
+`data/candidate_profile.json` to include them in generated resume contact details.
+An empty value omits that field. Candidate name, email, phone, location, and profile
+links are inserted locally and are not sent to the resume-generation model.
 
 Phase 2 does not extract a PDF automatically. Review and correct the structured JSON before using it for matching; this prevents unsupported experience claims from becoming part of an application.
 

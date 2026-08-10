@@ -73,6 +73,7 @@ h1 {
 .contact a {
   color: inherit;
   text-decoration: none;
+  overflow-wrap: anywhere;
 }
 
 section { margin-top: 20px; }
@@ -248,6 +249,16 @@ class ResumeHTMLRenderer:
             contact.append(f"<span>{escape(candidate.phone)}</span>")
         if candidate.location:
             contact.append(f"<span>{escape(candidate.location)}</span>")
+        for url in (
+            candidate.linkedin_url,
+            candidate.github_url,
+            candidate.website_url,
+        ):
+            if url:
+                contact.append(
+                    f'<a href="{escape(url, quote=True)}">'
+                    f"{escape(self._display_url(url))}</a>"
+                )
         return "\n".join(
             (
                 "<!doctype html>",
@@ -274,6 +285,17 @@ class ResumeHTMLRenderer:
                 "",
             )
         )
+
+    @staticmethod
+    def _display_url(value: str) -> str:
+        display = value
+        for prefix in ("https://", "http://"):
+            if display.casefold().startswith(prefix):
+                display = display[len(prefix) :]
+                break
+        if display.casefold().startswith("www."):
+            display = display[4:]
+        return display.rstrip("/") or value
 
     @staticmethod
     def _section(title: str, body: str) -> str:

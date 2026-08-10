@@ -23,6 +23,9 @@ class ResumeHTMLRendererTests(unittest.TestCase):
             email="candidate@example.com",
             phone="(555) 123-4567",
             location="Denver & Remote",
+            linkedin_url="https://www.linkedin.com/in/example-candidate",
+            github_url="https://github.com/example-candidate",
+            website_url="https://example.dev/?from=resume&format=html",
             skills=("Python", "SQL"),
         )
         self.knowledge = ResumeKnowledgeBase(
@@ -93,6 +96,21 @@ class ResumeHTMLRendererTests(unittest.TestCase):
         self.assertIn("Example &lt;Candidate&gt;", document)
         self.assertIn("(555) 123-4567", document)
         self.assertIn("Denver &amp; Remote", document)
+        self.assertIn(
+            'href="https://www.linkedin.com/in/example-candidate">'
+            "linkedin.com/in/example-candidate</a>",
+            document,
+        )
+        self.assertIn(
+            'href="https://github.com/example-candidate">'
+            "github.com/example-candidate</a>",
+            document,
+        )
+        self.assertIn(
+            'href="https://example.dev/?from=resume&amp;format=html">'
+            "example.dev/?from=resume&amp;format=html</a>",
+            document,
+        )
         self.assertIn(
             '<strong class="summary-title">Senior Data Engineer &lt;Lead&gt;</strong>'
             " — Engineering &lt;script&gt;",

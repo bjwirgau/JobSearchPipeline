@@ -98,6 +98,9 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             email="candidate@example.com",
             phone="(555) 123-4567",
             location="Denver, CO",
+            linkedin_url="https://www.linkedin.com/in/example-candidate",
+            github_url="https://github.com/example-candidate",
+            website_url="https://example.dev",
             summary="Original Senior Software Engineer summary.",
             skills=("Python", "SQL"),
             resume_path="/private/source-resume.pdf",
@@ -200,6 +203,9 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("Example Candidate", prompt)
             self.assertNotIn("candidate@example.com", prompt)
             self.assertNotIn("(555) 123-4567", prompt)
+            self.assertNotIn("linkedin.com/in/example-candidate", prompt)
+            self.assertNotIn("github.com/example-candidate", prompt)
+            self.assertNotIn("example.dev", prompt)
             self.assertNotIn("Original Senior Software Engineer summary.", prompt)
             self.assertIn("Target Company", prompt)
             self.assertIn("Built a supported pipeline.", prompt)
@@ -216,6 +222,9 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Example Candidate", html)
             self.assertIn("candidate@example.com", html)
             self.assertIn("(555) 123-4567", html)
+            self.assertIn("linkedin.com/in/example-candidate", html)
+            self.assertIn("github.com/example-candidate", html)
+            self.assertIn("example.dev", html)
             self.assertIn(
                 '<strong class="summary-title">Senior Data Engineer</strong>'
                 " — Builds reliable data platforms.",
