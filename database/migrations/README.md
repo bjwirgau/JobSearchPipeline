@@ -22,3 +22,5 @@ The complete MySQL schema for new databases is defined in `database/schema.py`. 
 - `012_resume_generation_checked.sql` tracks which jobs completed resume
   generation grading and leaves existing prospects unchecked for one-time
   LLM evaluation.
+- `013_resume_file_name.sql` records generated resume filenames and indexes the
+  pending resume-generation queue.

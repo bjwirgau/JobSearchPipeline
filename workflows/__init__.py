@@ -14,6 +14,11 @@ from .resume_generation_workflow import (
     ResumeGenerationWorkflow,
     ResumeGenerationWorkflowResult,
 )
+from .resume_batch_generation_workflow import (
+    ResumeBatchGenerationFailure,
+    ResumeBatchGenerationWorkflow,
+    ResumeBatchGenerationWorkflowResult,
+)
 
 __all__ = [
     "ApplicationWorkflow",
@@ -28,4 +33,7 @@ __all__ = [
     "ResumeGenerationNotEligibleError",
     "ResumeGenerationWorkflow",
     "ResumeGenerationWorkflowResult",
+    "ResumeBatchGenerationFailure",
+    "ResumeBatchGenerationWorkflow",
+    "ResumeBatchGenerationWorkflowResult",
 ]

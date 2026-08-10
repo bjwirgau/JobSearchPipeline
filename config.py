@@ -122,6 +122,8 @@ class Settings:
     openai_api_key: str | None = field(default=None, repr=False)
     resume_generation_timeout_seconds: float = 120.0
     resume_generation_max_output_tokens: int = 6_000
+    resume_generation_batch_limit: int = 1
+    resume_generation_batch_format: str = "docx"
     resume_generation_prompt_path: Path = (
         PROJECT_ROOT / "prompts" / "generate_resume.txt"
     )
@@ -261,6 +263,13 @@ class Settings:
             resume_generation_max_output_tokens=int(
                 values.get("JOB_AGENT_RESUME_GENERATION_MAX_OUTPUT_TOKENS", "6000")
             ),
+            resume_generation_batch_limit=int(
+                values.get("JOB_AGENT_RESUME_GENERATION_BATCH_LIMIT", "1")
+            ),
+            resume_generation_batch_format=values.get(
+                "JOB_AGENT_RESUME_GENERATION_BATCH_FORMAT",
+                "docx",
+            ).strip().casefold(),
             resume_generation_prompt_path=_resolve_path(
                 values.get(
                     "JOB_AGENT_RESUME_GENERATION_PROMPT",
@@ -335,6 +344,14 @@ class Settings:
         if self.resume_generation_max_output_tokens <= 0:
             raise ValueError(
                 "JOB_AGENT_RESUME_GENERATION_MAX_OUTPUT_TOKENS must be greater than zero"
+            )
+        if not 1 <= self.resume_generation_batch_limit <= 100:
+            raise ValueError(
+                "JOB_AGENT_RESUME_GENERATION_BATCH_LIMIT must be between 1 and 100"
+            )
+        if self.resume_generation_batch_format not in {"html", "docx", "both"}:
+            raise ValueError(
+                "JOB_AGENT_RESUME_GENERATION_BATCH_FORMAT must be html, docx, or both"
             )
         if bool(self.adzuna_app_id) != bool(self.adzuna_app_key):
             raise ValueError(

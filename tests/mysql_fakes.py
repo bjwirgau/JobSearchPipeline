@@ -106,6 +106,7 @@ class FakeMySQLCursor:
                         "resume_generation_checked",
                         "resume_generation_candidate",
                         "resume_generation_model",
+                        "resume_file_name",
                         "created_at",
                         "updated_at",
                     }
@@ -151,6 +152,8 @@ class FakeMySQLCursor:
                 requested_columns = {"posted_at"}
             elif "column_name = 'resume_generation_checked'" in statement:
                 requested_columns = {"resume_generation_checked"}
+            elif "column_name = 'resume_file_name'" in statement:
+                requested_columns = {"resume_file_name"}
             elif "'resume_generation_candidate'" in statement:
                 requested_columns = {
                     "resume_generation_candidate",
@@ -202,6 +205,10 @@ class FakeMySQLCursor:
                 )
                 for row in self._connection.tables["job_prospects"].values():
                     row["resume_generation_model"] = None
+            if "add column resume_file_name" in statement:
+                self._connection.job_prospect_columns.add("resume_file_name")
+                for row in self._connection.tables["job_prospects"].values():
+                    row["resume_file_name"] = None
             return
         if statement.startswith("alter table company_prospects"):
             if "add column last_job_search_at" in statement:
@@ -297,6 +304,9 @@ class FakeMySQLCursor:
                     or "resume_generation_model = incoming" in statement
                     else existing.get("resume_generation_model")
                 ),
+                "resume_file_name": (
+                    existing.get("resume_file_name") if existing else None
+                ),
                 "created_at": existing["created_at"] if existing else now,
                 "updated_at": now,
             }
@@ -364,6 +374,26 @@ class FakeMySQLCursor:
             self.rowcount = 1
             return
         if statement.startswith("update job_prospects"):
+            if "set updated_at = utc_timestamp(6)" in statement:
+                (job_id,) = values
+                row = self._connection.tables["job_prospects"].get(job_id)
+                if (
+                    row
+                    and row.get("resume_generation_checked", False)
+                    and row.get("resume_generation_candidate", False)
+                    and row.get("resume_file_name") is None
+                ):
+                    row["updated_at"] = to_utc_naive(utc_now())
+                    self.rowcount = 1
+                return
+            if "set resume_file_name = %s" in statement:
+                file_name, job_id = values
+                row = self._connection.tables["job_prospects"].get(job_id)
+                if row:
+                    row["resume_file_name"] = file_name
+                    row["updated_at"] = to_utc_naive(utc_now())
+                    self.rowcount = 1
+                return
             if "where `match` >" in statement:
                 model, threshold = values
                 for row in self._connection.tables["job_prospects"].values():
@@ -423,7 +453,10 @@ class FakeMySQLCursor:
                 row = self._connection.tables["job_prospects"].get(values[0])
                 self._rows = [dict(row)] if row else []
                 return
-            if "where `match` is not null" in statement:
+            if (
+                "where `match` is not null" in statement
+                and "job_id in" in statement
+            ):
                 selected_ids = set(values)
                 self._rows = [
                     {"job_id": row["job_id"]}
@@ -444,11 +477,36 @@ class FakeMySQLCursor:
                             "resume_generation_checked = true" not in statement
                             or row.get("resume_generation_checked", False)
                         )
+                        and (
+                            "resume_file_name is null" not in statement
+                            or row.get("resume_file_name") is None
+                        )
+                        and (
+                            "resume_generation_model is not null" not in statement
+                            or row.get("resume_generation_model") is not None
+                        )
+                        and (
+                            "job_data is not null" not in statement
+                            or row.get("job_data") is not None
+                        )
+                        and (
+                            "`match` is not null" not in statement
+                            or row.get("match") is not None
+                        )
                     ),
-                    key=lambda row: (
-                        -(row["match"] or 0),
-                        row["title"],
-                        row["company"],
+                    key=(
+                        (lambda row: (
+                            row["updated_at"],
+                            -(row["match"] or 0),
+                            row["created_at"],
+                            row["job_id"],
+                        ))
+                        if "order by updated_at" in statement
+                        else (lambda row: (
+                            -(row["match"] or 0),
+                            row["title"],
+                            row["company"],
+                        ))
                     ),
                 )[:limit]
                 self._rows = [dict(row) for row in rows]

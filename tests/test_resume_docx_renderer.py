@@ -127,7 +127,7 @@ class ResumeDocxRendererTests(unittest.TestCase):
         self.assertIn("Senior Data Engineer — Builds reliable data platforms.", text)
         self.assertIn("PROFESSIONAL EXPERIENCE", text)
         self.assertIn("Remote, US", text)
-        self.assertIn("January 2022 – Present", text)
+        self.assertIn("Jan 2022 – Current", text)
         self.assertIn("Built reliable data pipelines.", text)
         self.assertIn("Improved platform reliability.", text)
         self.assertIn("Bachelor of Science in Computer Engineering", text)
@@ -153,7 +153,7 @@ class ResumeDocxRendererTests(unittest.TestCase):
         )
         self.assertEqual(
             experience_heading.text.splitlines()[0],
-            "Data Engineer\tJanuary 2022 – Present",
+            "Data Engineer\tJan 2022 – Current",
         )
         tab_stops = list(experience_heading.paragraph_format.tab_stops)
         self.assertEqual(len(tab_stops), 1)

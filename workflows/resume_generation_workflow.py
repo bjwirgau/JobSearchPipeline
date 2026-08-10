@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
 
 from agents import ResumeGenerationAgent
 from models import (
@@ -101,6 +102,20 @@ class ResumeGenerationWorkflow:
             model=prospect.resume_generation_model,
             document_format=resolved_format,
         )
+        preferred_artifact = next(
+            (
+                artifact
+                for artifact in artifacts
+                if Path(artifact.path).suffix.casefold() == ".docx"
+            ),
+            artifacts[0],
+        )
+        resume_file_name = Path(preferred_artifact.path).name
+        self._repository.record_resume_file_name(
+            resolved_job_id,
+            resume_file_name,
+        )
+        prospect = replace(prospect, resume_file_name=resume_file_name)
         return ResumeGenerationWorkflowResult(
             prospect=prospect,
             job=job,

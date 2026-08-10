@@ -200,7 +200,7 @@ class JobProspectRepository:
                 SELECT job_id, `match`, title, company, location, salary, source,
                        url, posted_at, resume_generation_checked,
                        resume_generation_candidate, resume_generation_model,
-                       created_at, updated_at
+                       resume_file_name, created_at, updated_at
                 FROM job_prospects
                 WHERE resume_generation_checked = TRUE
                   AND resume_generation_candidate = TRUE
@@ -211,6 +211,80 @@ class JobProspectRepository:
             )
             rows = cursor.fetchall()
         return tuple(JobProspect.from_row(row) for row in rows)
+
+    def list_pending_resume_generation_candidates(
+        self,
+        *,
+        limit: int = 1,
+    ) -> tuple[JobProspect, ...]:
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        with self._database.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT job_id, `match`, title, company, location, salary, source,
+                       url, posted_at, resume_generation_checked,
+                       resume_generation_candidate, resume_generation_model,
+                       resume_file_name, created_at, updated_at
+                FROM job_prospects
+                WHERE `match` IS NOT NULL
+                  AND resume_generation_checked = TRUE
+                  AND resume_generation_candidate = TRUE
+                  AND resume_generation_model IS NOT NULL
+                  AND resume_file_name IS NULL
+                  AND job_data IS NOT NULL
+                ORDER BY updated_at, `match` DESC, created_at, job_id
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = cursor.fetchall()
+        return tuple(JobProspect.from_row(row) for row in rows)
+
+    def record_resume_generation_attempt(self, job_id: str) -> None:
+        resolved_job_id = job_id.strip()
+        if not resolved_job_id:
+            raise ValueError("job_id must not be empty")
+        with self._database.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE job_prospects
+                SET updated_at = UTC_TIMESTAMP(6)
+                WHERE job_id = %s
+                  AND resume_generation_checked = TRUE
+                  AND resume_generation_candidate = TRUE
+                  AND resume_file_name IS NULL
+                """,
+                (resolved_job_id,),
+            )
+            if cursor.rowcount != 1:
+                raise LookupError(
+                    f"pending resume-generation prospect not found: {resolved_job_id}"
+                )
+
+    def record_resume_file_name(self, job_id: str, file_name: str) -> None:
+        resolved_job_id = job_id.strip()
+        resolved_file_name = file_name.strip()
+        if not resolved_job_id:
+            raise ValueError("job_id must not be empty")
+        if not resolved_file_name:
+            raise ValueError("resume file name must not be empty")
+        if len(resolved_file_name) > 255:
+            raise ValueError("resume file name must be at most 255 characters")
+        if "/" in resolved_file_name or "\\" in resolved_file_name:
+            raise ValueError("resume file name must not contain a path")
+        with self._database.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE job_prospects
+                SET resume_file_name = %s,
+                    updated_at = UTC_TIMESTAMP(6)
+                WHERE job_id = %s
+                """,
+                (resolved_file_name, resolved_job_id),
+            )
+            if cursor.rowcount != 1:
+                raise LookupError(f"job prospect not found: {resolved_job_id}")
 
     def matched_job_ids(self, job_ids: Sequence[str]) -> frozenset[str]:
         unique_ids = tuple(dict.fromkeys(job_id for job_id in job_ids if job_id))
@@ -237,7 +311,7 @@ class JobProspectRepository:
                 SELECT job_id, `match`, title, company, location, salary, source, url,
                        posted_at, resume_generation_checked,
                        resume_generation_candidate, resume_generation_model,
-                       created_at, updated_at
+                       resume_file_name, created_at, updated_at
                 FROM job_prospects
                 WHERE job_id = %s
                 """,
@@ -279,7 +353,7 @@ class JobProspectRepository:
                 SELECT job_id, `match`, title, company, location, salary, source, url,
                        posted_at, resume_generation_checked,
                        resume_generation_candidate, resume_generation_model,
-                       created_at, updated_at
+                       resume_file_name, created_at, updated_at
                 FROM job_prospects
                 ORDER BY (`match` IS NULL), `match` DESC, title, company
                 LIMIT %s

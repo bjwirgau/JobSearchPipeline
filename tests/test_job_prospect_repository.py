@@ -178,6 +178,57 @@ class JobProspectRepositoryTests(unittest.TestCase):
             (qualifying_match,),
         )
 
+    def test_tracks_pending_resume_generation_by_file_name(self) -> None:
+        job = JobPosting(
+            source="sample",
+            external_id="resume-job",
+            title="Data Engineer",
+            company="Example",
+            url="https://example.com/jobs/resume-job",
+        )
+        self.repository.save_jobs((job,))
+        self.repository.update_matches(
+            (
+                MatchResult(
+                    candidate_id="candidate-1",
+                    job_id=job.job_id,
+                    score=0.9,
+                    breakdown=MatchBreakdown(
+                        skills=0.9,
+                        title=0.9,
+                        location=0.9,
+                        experience=0.9,
+                    ),
+                ),
+            )
+        )
+
+        pending = self.repository.list_pending_resume_generation_candidates()
+
+        self.assertEqual(tuple(value.job_id for value in pending), (job.job_id,))
+        self.assertIsNone(pending[0].resume_file_name)
+
+        attempted_before = pending[0].updated_at
+        self.repository.record_resume_generation_attempt(job.job_id)
+        attempted_after = self.repository.get(job.job_id).updated_at
+        self.assertGreaterEqual(attempted_after, attempted_before)
+        with self.assertRaisesRegex(LookupError, "pending.*not found"):
+            self.repository.record_resume_generation_attempt("unknown-job")
+
+        file_name = "candidate-resume-job-tailored-resume.docx"
+        self.repository.record_resume_file_name(job.job_id, file_name)
+
+        stored = self.repository.get(job.job_id)
+        self.assertEqual(stored.resume_file_name, file_name)
+        self.assertEqual(
+            self.repository.list_pending_resume_generation_candidates(),
+            (),
+        )
+        with self.assertRaisesRegex(ValueError, "must not contain a path"):
+            self.repository.record_resume_file_name(job.job_id, f"data/{file_name}")
+        with self.assertRaisesRegex(LookupError, "not found"):
+            self.repository.record_resume_file_name("unknown-job", file_name)
+
     def test_preserves_scraped_posting_date_when_later_enrichment_fails(self) -> None:
         posted_at = datetime(2026, 8, 1, 12, tzinfo=timezone.utc)
         scraped = JobPosting(

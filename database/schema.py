@@ -11,7 +11,7 @@ from utils.dates import to_utc_naive, utc_now
 from .connection import Database, MySQLCursor
 
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 SCHEMA_STATEMENTS = (
     """
@@ -44,6 +44,7 @@ SCHEMA_STATEMENTS = (
         resume_generation_checked BOOLEAN NOT NULL DEFAULT FALSE,
         resume_generation_candidate BOOLEAN NOT NULL DEFAULT FALSE,
         resume_generation_model VARCHAR(64) NULL,
+        resume_file_name VARCHAR(255) NULL,
         created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
         updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
             ON UPDATE CURRENT_TIMESTAMP(6),
@@ -54,6 +55,9 @@ SCHEMA_STATEMENTS = (
         ),
         KEY idx_job_prospects_resume_unchecked (
             resume_generation_checked, created_at, job_id
+        ),
+        KEY idx_job_prospects_resume_pending (
+            resume_generation_candidate, resume_file_name, updated_at, `match`
         ),
         CONSTRAINT ck_job_prospects_match
             CHECK (`match` IS NULL OR (`match` >= 0 AND `match` <= 1))
@@ -144,6 +148,8 @@ def initialize_schema(database: Database) -> None:
             _add_job_prospect_posted_at(database, cursor)
         if current_version < 12:
             _add_job_prospect_resume_generation_checked(database, cursor)
+        if current_version < 13:
+            _add_job_prospect_resume_file_name(database, cursor)
         cursor.execute(
             """
             INSERT IGNORE INTO schema_migrations(version, applied_at)
@@ -346,6 +352,32 @@ def _add_job_prospect_resume_generation_checked(
             ADD COLUMN resume_generation_checked BOOLEAN NOT NULL DEFAULT FALSE,
             ADD KEY idx_job_prospects_resume_unchecked (
                 resume_generation_checked, created_at, job_id
+            )
+            """
+        )
+
+
+def _add_job_prospect_resume_file_name(
+    database: Database,
+    cursor: MySQLCursor,
+) -> None:
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME AS app_column_name
+        FROM information_schema.columns
+        WHERE table_schema = %s
+          AND table_name = 'job_prospects'
+          AND column_name = 'resume_file_name'
+        """,
+        (database.config.database,),
+    )
+    if not cursor.fetchone():
+        cursor.execute(
+            """
+            ALTER TABLE job_prospects
+            ADD COLUMN resume_file_name VARCHAR(255) NULL,
+            ADD KEY idx_job_prospects_resume_pending (
+                resume_generation_candidate, resume_file_name, updated_at, `match`
             )
             """
         )

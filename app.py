@@ -66,6 +66,7 @@ from utils.logging import configure_logging
 from workflows import (
     JobMatchingWorkflow,
     JobSearchWorkflow,
+    ResumeBatchGenerationWorkflow,
     ResumeGenerationJobDataError,
     ResumeGenerationJobNotFoundError,
     ResumeGenerationNotEligibleError,
@@ -86,6 +87,7 @@ class JobAgentContainer:
     job_search_workflow: JobSearchWorkflow
     job_matching_workflow: JobMatchingWorkflow
     resume_generation_workflow: ResumeGenerationWorkflow
+    resume_batch_generation_workflow: ResumeBatchGenerationWorkflow
 
 
 def build_container(
@@ -218,6 +220,10 @@ def build_container(
             encoding="utf-8"
         ),
     )
+    resume_generation_workflow = ResumeGenerationWorkflow(
+        repository=job_prospects,
+        agent=resume_generation_agent,
+    )
     return JobAgentContainer(
         settings=settings,
         database=database,
@@ -240,9 +246,10 @@ def build_container(
             resume_generation_model=settings.resume_generation_model,
             max_requests_per_run=settings.matching_max_requests_per_run,
         ),
-        resume_generation_workflow=ResumeGenerationWorkflow(
+        resume_generation_workflow=resume_generation_workflow,
+        resume_batch_generation_workflow=ResumeBatchGenerationWorkflow(
             repository=job_prospects,
-            agent=resume_generation_agent,
+            resume_generation=resume_generation_workflow,
         ),
     )
 
@@ -265,9 +272,20 @@ def _arguments(
         help="generate one resume for a job marked as a resume candidate",
     )
     parser.add_argument(
+        "--generate-matched-resumes",
+        action="store_true",
+        help="generate resumes for matched candidates without a stored filename",
+    )
+    parser.add_argument(
         "--resume-format",
         choices=("html", "docx", "both"),
-        help="generated resume format; defaults to html",
+        help="generated format; defaults to html for one job and docx for a batch",
+    )
+    parser.add_argument(
+        "--resume-limit",
+        type=int,
+        default=settings.resume_generation_batch_limit if settings else 1,
+        help="maximum queued resumes to generate, up to 100",
     )
     parser.add_argument(
         "--match-limit",
@@ -344,23 +362,32 @@ def _arguments(
             arguments.search,
             arguments.match_prospects,
             bool(arguments.generate_resume),
+            arguments.generate_matched_resumes,
             arguments.crawl_greenhouse_companies,
         )
     )
     if selected_commands > 1:
         parser.error(
-            "--search, --match-prospects, --generate-resume, and "
+            "--search, --match-prospects, --generate-resume, "
+            "--generate-matched-resumes, and "
             "--crawl-greenhouse-companies "
             "cannot be combined"
         )
     if not 1 <= arguments.match_limit <= 15:
         parser.error("--match-limit must be between 1 and 15")
+    if not 1 <= arguments.resume_limit <= 100:
+        parser.error("--resume-limit must be between 1 and 100")
     if not 1 <= arguments.greenhouse_board_limit <= 1_000:
         parser.error("--greenhouse-board-limit must be between 1 and 1000")
     if arguments.dry_run and not arguments.search:
         parser.error("--dry-run requires --search")
-    if arguments.resume_format and not arguments.generate_resume:
-        parser.error("--resume-format requires --generate-resume")
+    if arguments.resume_format and not (
+        arguments.generate_resume or arguments.generate_matched_resumes
+    ):
+        parser.error(
+            "--resume-format requires --generate-resume or "
+            "--generate-matched-resumes"
+        )
     unsupported_dry_run_sources = tuple(
         source
         for source in arguments.source
@@ -684,6 +711,63 @@ async def _run_resume_generation(
     return 0
 
 
+async def _run_matched_resume_generation(
+    container: JobAgentContainer,
+    *,
+    limit: int,
+    document_format: str,
+) -> int:
+    if not container.settings.openai_api_key:
+        logging.getLogger(__name__).error(
+            "Resume generation requires OPENAI_API_KEY to be configured"
+        )
+        return 1
+    try:
+        candidate = _load_candidate(container.settings.candidate_profile_path)
+        knowledge = container.resume_knowledge_service.load()
+        result = await container.resume_batch_generation_workflow.run(
+            candidate=candidate,
+            knowledge=knowledge,
+            limit=limit,
+            document_format=document_format,
+        )
+    except (
+        ResumeGenerationNotConfiguredError,
+        ResumeKnowledgeError,
+        MissingDocxDependencyError,
+        MissingOpenAIDependencyError,
+        TypeError,
+        ValueError,
+    ) as error:
+        logging.getLogger(__name__).error(
+            "Matched resume generation failed: %s",
+            error,
+        )
+        return 1
+
+    print(
+        f"Selected {len(result.selected)} queued resume candidates; "
+        f"generated {len(result.generated)}; "
+        f"failed {len(result.failures)}."
+    )
+    for generated in result.generated:
+        print(
+            f"Generated {generated.job.job_id}: "
+            f"{generated.prospect.resume_file_name}"
+        )
+        for artifact in generated.artifacts:
+            print(f"  Saved: {artifact.path}")
+    for failure in result.failures:
+        logging.getLogger(__name__).error(
+            "job_id=%s title=%s error=%s: %s",
+            failure.prospect.job_id,
+            failure.prospect.title,
+            failure.error_type,
+            failure.message,
+        )
+    return 0 if not result.failures else 1
+
+
 async def _run_company_crawl(
     container: JobAgentContainer,
     *,
@@ -767,6 +851,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 container,
                 job_id=arguments.generate_resume,
                 document_format=arguments.resume_format or "html",
+            )
+        )
+    if arguments.generate_matched_resumes:
+        return asyncio.run(
+            _run_matched_resume_generation(
+                container,
+                limit=arguments.resume_limit,
+                document_format=(
+                    arguments.resume_format
+                    or settings.resume_generation_batch_format
+                ),
             )
         )
     if arguments.search:

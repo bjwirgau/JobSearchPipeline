@@ -148,12 +148,14 @@ Normalized jobs consistently include source identity, title, company, URL, locat
 MySQL stores the review-oriented projection in `job_prospects` with `job_id`,
 `match`, `title`, `company`, `location`, `salary`, `source`, `url`, `posted_at`,
 `job_data`, `resume_generation_checked`, `resume_generation_candidate`,
-`resume_generation_model`, `created_at`, and `updated_at` columns. `job_data`
+`resume_generation_model`, `resume_file_name`, `created_at`, and `updated_at`
+columns. `job_data`
 retains the complete
 normalized posting needed by the asynchronous matcher. The database assigns both UTC timestamps when a
 prospect is first stored, preserves `created_at`, and refreshes `updated_at`
-when the prospect or its match score changes. The match is nullable during
-search and updated to a score between `0` and `1` after the scoring stage.
+when the prospect, match score, or resume-generation state changes. The match
+is nullable during search and updated to a score between `0` and `1` after the
+scoring stage.
 Candidate identity and preferences remain in `data/candidate_profile.json`;
 application records are not persisted in the current schema.
 
@@ -220,12 +222,13 @@ After Gemini matching, a score strictly greater than
 generation candidate. The intended generation model is stored alongside the
 job and defaults to the official `gpt-5.4` model ID. Schema migration 9 also
 backfills existing matches above 85%. Matching only creates the durable queue;
-it does not send candidate data to OpenAI. Resume generation requires an
-explicit command for one marked job. GPT-5.4 supports text output through the
+it does not send candidate data to OpenAI. Resumes can be generated explicitly
+for one marked job or by the optional scheduled queue worker. GPT-5.4 supports
+text output through the
 Responses API; see the
 [official model documentation](https://developers.openai.com/api/docs/models/gpt-5.4).
 
-### Generate one marked resume
+### Generate marked resumes
 
 Configure the OpenAI API key and optional generation limits in `.env`:
 
@@ -235,6 +238,8 @@ JOB_AGENT_RESUME_GENERATION_MODEL=gpt-5.4
 JOB_AGENT_RESUME_GENERATION_TIMEOUT_SECONDS=120
 JOB_AGENT_RESUME_GENERATION_MAX_OUTPUT_TOKENS=6000
 JOB_AGENT_RESUME_GENERATION_PROMPT=prompts/generate_resume.txt
+JOB_AGENT_RESUME_GENERATION_BATCH_LIMIT=1
+JOB_AGENT_RESUME_GENERATION_BATCH_FORMAT=docx
 ```
 
 Keep the key in `.env`, which is ignored by Git, or inject it from the deployment
@@ -245,10 +250,11 @@ Find a job that has completed eligibility review and is marked as a generation
 candidate:
 
 ```sql
-SELECT job_id, `match`, title, company, resume_generation_model
+SELECT job_id, `match`, title, company, resume_generation_model, resume_file_name
 FROM job_prospects
 WHERE resume_generation_checked = TRUE
   AND resume_generation_candidate = TRUE
+  AND resume_file_name IS NULL
 ORDER BY `match` DESC;
 ```
 
@@ -296,6 +302,11 @@ ignored by Git. Open HTML in a browser to review it or use the browser's
 Microsoft Word, LibreOffice Writer, or another compatible editor. Running the
 command again for the same candidate, job, and format replaces the existing file.
 Always review the document before using it in an application.
+
+After a successful write, the application stores the generated file's basename
+in `job_prospects.resume_file_name`. For `--resume-format both`, the DOCX
+filename is stored. A null filename represents a queued generation candidate;
+failed attempts stay null and can be retried.
 
 ### Enable and Configure Job Searching
 
@@ -461,7 +472,7 @@ directory is ignored by Git. Cron uses the project's `.venv` Python executable
 and the application continues to load database and crawler settings from
 `.env`.
 
-### Scheduled Greenhouse prospect search and matching
+### Scheduled Greenhouse prospect search, matching, and resume generation
 
 The prospect-search runner reserves the next rotating batch of Greenhouse board
 tokens from `company_prospects`, searches those boards using the candidate's
@@ -489,20 +500,36 @@ JOB_AGENT_MATCHING_MAX_REQUESTS_PER_RUN=15
 * * * * * /opt/job-agent/scripts/run_job_matcher.sh
 ```
 
-Both runners use lock directories, so overlapping invocations exit without
-starting another search or matching batch. Before enabling them, configure
-these values in the project's `.env`:
+The resume generator also runs every minute by default. It selects the
+least-recently-attempted candidates that do not yet have a `resume_file_name`,
+uses match score as a tie-breaker, generates the configured format, and stores
+the basename only after the document is written successfully:
+
+```cron
+JOB_AGENT_RESUME_GENERATION_BATCH_LIMIT=1
+JOB_AGENT_RESUME_GENERATION_BATCH_FORMAT=docx
+* * * * * /opt/job-agent/scripts/run_resume_generator.sh
+```
+
+The conservative default processes one resume per minute to control OpenAI API
+usage and instance load; raise the limit to at most 100 when appropriate. The
+repeated cron runs eventually drain every eligible row. Each runner uses a lock
+directory, so an overlapping invocation exits without starting another batch.
+Before enabling them, configure these values in the project's `.env`:
 
 ```env
 JOB_AGENT_SEARCH_ENABLED=true
 JOB_AGENT_GREENHOUSE_BOARD_LIMIT=25
 GEMINI_API_KEY=your-api-key
+OPENAI_API_KEY=your-api-key
+JOB_AGENT_RESUME_GENERATION_BATCH_LIMIT=1
+JOB_AGENT_RESUME_GENERATION_BATCH_FORMAT=docx
 ```
 
-Install all three project schedules (crawler, prospect search, and matcher) for
-the current user from the project root. The installer is idempotent, replaces
-older entries for these scripts, and
-preserves unrelated crontab entries:
+Install all four project schedules (crawler, prospect search, matcher, and
+resume generator) for the current user from the project root. The installer is
+idempotent, replaces older entries for these scripts, and preserves unrelated
+crontab entries:
 
 ```bash
 ./scripts/install_cron_jobs.sh
@@ -513,6 +540,7 @@ Override schedules only for the installer invocation when needed:
 ```bash
 JOB_AGENT_PROSPECT_SEARCH_CRON_SCHEDULE='*/30 * * * *' \
 JOB_AGENT_MATCHER_CRON_SCHEDULE='* * * * *' \
+JOB_AGENT_RESUME_GENERATOR_CRON_SCHEDULE='* * * * *' \
   ./scripts/install_cron_jobs.sh
 ```
 
@@ -521,9 +549,10 @@ with:
 
 ```bash
 crontab -l
-pgrep -af 'run_greenhouse_(crawler|prospect_search)|run_job_matcher'
+pgrep -af 'run_greenhouse_(crawler|prospect_search)|run_job_matcher|run_resume_generator'
 tail -f /opt/job-agent/logs/greenhouse-prospect-search.log
 tail -f /opt/job-agent/logs/job-matcher.log
+tail -f /opt/job-agent/logs/resume-generator.log
 ```
 
 Run the scheduled behavior manually without waiting for cron:
@@ -531,6 +560,7 @@ Run the scheduled behavior manually without waiting for cron:
 ```bash
 ./scripts/run_greenhouse_prospect_search.sh
 ./scripts/run_job_matcher.sh
+./scripts/run_resume_generator.sh
 ```
 
 The equivalent application command is:
@@ -542,6 +572,7 @@ python3 app.py --search \
   --limit 100
 
 python3 app.py --match-prospects --match-limit 15
+python3 app.py --generate-matched-resumes --resume-limit 1 --resume-format docx
 ```
 
 Each successful search refreshes stored posting data without erasing an
@@ -550,6 +581,13 @@ where `resume_generation_checked` is false and `job_data` is available. This
 includes legacy scores not graded by the current LLM workflow. A successful
 evaluation marks the flag true whether or not the role qualifies; failed jobs
 remain unchecked and are retried by a later minute-based run.
+
+The resume worker only selects rows marked as candidates with a non-null match,
+generation model, and normalized `job_data`, and a null `resume_file_name`.
+Each attempt refreshes `updated_at`, so a persistent failure moves behind other
+pending work instead of blocking the queue. Failures are logged and remain
+pending for a later run. Successful files are stored under
+`JOB_AGENT_GENERATED_DOCUMENTS`; only their basenames are saved in MySQL.
 
 `JOB_AGENT_COMPANY_CRAWLER_SCAN_LIMIT` is the maximum number of URL-index
 records returned from the current archive page for each supported Greenhouse
@@ -909,8 +947,8 @@ python3 -m unittest discover -s ./tests -p 'test_*.py' -v
 ```
 
 The suite covers resume knowledge, parsing, structured LLM matching, single-job
-resume generation, MySQL job-prospect persistence, the search safety flag, and
-fixture-based normalization for every Phase 3 source without making network or
+and queued resume generation, MySQL job-prospect persistence, the search safety
+flag, and fixture-based normalization for every Phase 3 source without making network or
 live-database requests. LLM and repository tests use injected fakes; use a
 separate integration environment to validate API credentials, model access,
 database credentials, and server permissions.

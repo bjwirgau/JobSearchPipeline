@@ -224,6 +224,11 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(artifact_path.exists())
             self.assertIn(self.job.job_id, artifact_path.name)
             self.assertEqual(artifact_path.suffix, ".html")
+            self.assertEqual(result.prospect.resume_file_name, artifact_path.name)
+            self.assertEqual(
+                self.repository.get(self.job.job_id).resume_file_name,
+                artifact_path.name,
+            )
             html = artifact_path.read_text(encoding="utf-8")
             self.assertIn("<!doctype html>", html)
             self.assertIn("<style>", html)
@@ -429,6 +434,11 @@ class ResumeGenerationWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(all(path.exists() for path in paths))
             docx_path = next(path for path in paths if path.suffix == ".docx")
             self.assertTrue(docx_path.read_bytes().startswith(b"PK"))
+            self.assertEqual(result.prospect.resume_file_name, docx_path.name)
+            self.assertEqual(
+                self.repository.get(self.job.job_id).resume_file_name,
+                docx_path.name,
+            )
 
     async def test_reports_unknown_job(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

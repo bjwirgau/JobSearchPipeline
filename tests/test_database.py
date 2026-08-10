@@ -54,7 +54,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertFalse(self.server.resume_candidate_foreign_key)
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {2, 12},
+            {2, 13},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)
@@ -69,6 +69,7 @@ class DatabaseTests(unittest.TestCase):
             self.server.job_prospect_columns,
         )
         self.assertIn("resume_generation_model", self.server.job_prospect_columns)
+        self.assertIn("resume_file_name", self.server.job_prospect_columns)
         self.assertIn("last_job_search_at", self.server.company_prospect_columns)
 
     def test_version_three_schema_adds_job_prospect_timestamps(self) -> None:
@@ -107,7 +108,7 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(
             set(self.server.tables["schema_migrations"]),
-            {3, 12},
+            {3, 13},
         )
         self.assertIn("created_at", self.server.job_prospect_columns)
         self.assertIn("updated_at", self.server.job_prospect_columns)
@@ -121,6 +122,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertFalse(migrated["resume_generation_checked"])
         self.assertFalse(migrated["resume_generation_candidate"])
         self.assertIsNone(migrated["resume_generation_model"])
+        self.assertIsNone(migrated["resume_file_name"])
 
     def test_version_eight_schema_backfills_resume_candidates(self) -> None:
         self.server.tables = {
@@ -195,6 +197,73 @@ class DatabaseTests(unittest.TestCase):
         self.assertFalse(threshold["resume_generation_checked"])
         self.assertIsNone(threshold["resume_generation_model"])
         self.assertIn("posted_at", self.server.job_prospect_columns)
+        self.assertIn("resume_file_name", self.server.job_prospect_columns)
+
+    def test_version_twelve_schema_adds_resume_file_name(self) -> None:
+        self.server.tables = {
+            "schema_migrations": {
+                12: {"version": 12, "applied_at": None},
+            },
+            "resume_knowledge": {},
+            "job_prospects": {
+                "existing-job": {
+                    "job_id": "existing-job",
+                    "match": 0.9,
+                    "title": "Data Engineer",
+                    "company": "Example",
+                    "location": "Remote",
+                    "salary": "Not provided",
+                    "source": "fixture",
+                    "url": "https://example.com/jobs/1",
+                    "posted_at": None,
+                    "job_data": {},
+                    "resume_generation_checked": True,
+                    "resume_generation_candidate": True,
+                    "resume_generation_model": "gpt-5.4",
+                    "created_at": None,
+                    "updated_at": None,
+                }
+            },
+            "company_prospects": {},
+            "crawl_pages": {},
+            "crawl_discovery_cursors": {},
+            "workflow_runs": {},
+        }
+        self.server.job_prospect_columns = {
+            "job_id",
+            "match",
+            "title",
+            "company",
+            "location",
+            "salary",
+            "source",
+            "url",
+            "posted_at",
+            "job_data",
+            "resume_generation_checked",
+            "resume_generation_candidate",
+            "resume_generation_model",
+            "created_at",
+            "updated_at",
+        }
+        self.server.company_prospect_columns = {
+            "company_id",
+            "company_name",
+            "board_token",
+            "company_url",
+            "last_job_search_at",
+            "created_at",
+            "updated_at",
+        }
+        self.server.resume_candidate_foreign_key = False
+
+        initialize_schema(self.database)
+
+        self.assertEqual(set(self.server.tables["schema_migrations"]), {12, 13})
+        self.assertIn("resume_file_name", self.server.job_prospect_columns)
+        self.assertIsNone(
+            self.server.tables["job_prospects"]["existing-job"]["resume_file_name"]
+        )
 
     def test_failed_transaction_rolls_back_and_closes(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "stop transaction"):

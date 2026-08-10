@@ -213,6 +213,38 @@ class ApplicationCriteriaTests(unittest.TestCase):
             _arguments(["--resume-format", "docx"], settings=self.settings)
         self.assertIn("requires --generate-resume", errors.getvalue())
 
+    def test_matched_resume_generation_is_a_bounded_separate_command(self) -> None:
+        arguments = _arguments(
+            [
+                "--generate-matched-resumes",
+                "--resume-limit",
+                "5",
+                "--resume-format",
+                "docx",
+            ],
+            settings=self.settings,
+        )
+
+        self.assertTrue(arguments.generate_matched_resumes)
+        self.assertEqual(arguments.resume_limit, 5)
+        self.assertEqual(arguments.resume_format, "docx")
+
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            _arguments(
+                ["--generate-matched-resumes", "--generate-resume", "job-123"],
+                settings=self.settings,
+            )
+        self.assertIn("cannot be combined", errors.getvalue())
+
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            _arguments(
+                ["--generate-matched-resumes", "--resume-limit", "101"],
+                settings=self.settings,
+            )
+        self.assertIn("between 1 and 100", errors.getvalue())
+
     def test_greenhouse_board_limit_is_configurable_and_validated(self) -> None:
         arguments = _arguments(
             ["--search", "--greenhouse-board-limit", "10"],
