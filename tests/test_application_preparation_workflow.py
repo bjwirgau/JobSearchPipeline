@@ -178,11 +178,15 @@ class ApplicationPreparationWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 generated_documents_dir=Path(directory),
             )
 
-            result = await workflow.run(
-                job_id=self.job.job_id,
-                candidate=self.candidate,
-                knowledge=self.knowledge,
-            )
+            with self.assertLogs(
+                "workflows.application_preparation_workflow",
+                level="INFO",
+            ) as captured_logs:
+                result = await workflow.run(
+                    job_id=self.job.job_id,
+                    candidate=self.candidate,
+                    knowledge=self.knowledge,
+                )
 
         self.assertTrue(result.complete)
         self.assertTrue(result.resume_uploaded)
@@ -190,6 +194,12 @@ class ApplicationPreparationWorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(result.submission_controls_disabled, 2)
         self.assertEqual(browser.urls, [self.job.url])
         self.assertFalse(session.closed)
+        logs = "\n".join(captured_logs.output)
+        self.assertIn("event=application_form_answer", logs)
+        self.assertIn("label='Full Name'", logs)
+        self.assertIn("value='Example'", logs)
+        self.assertIn("source=resume", logs)
+        self.assertIn("value='candidate-job-1.docx'", logs)
         result.session.close()
         self.assertTrue(session.closed)
 

@@ -63,6 +63,8 @@ from services import (
     MissingOpenAIDependencyError,
     OpenAIResumeConfig,
     OpenAIResumeGenerator,
+    OpenAILLMConfig,
+    OpenAILLMService,
     RequestsHttpClient,
     ResumeGenerationNotConfiguredError,
     ResumeGenerationResponseError,
@@ -203,7 +205,7 @@ def build_container(
         enabled=settings.search_enabled,
     )
     parser_agent = ParserAgent()
-    llm = (
+    matching_llm = (
         GeminiLLMService(
             GeminiConfig(
                 api_key=settings.gemini_api_key,
@@ -215,7 +217,7 @@ def build_container(
         else DisabledLLMService()
     )
     matching_agent = MatchingAgent(
-        llm=llm,
+        llm=matching_llm,
         prompt_template=settings.matching_prompt_path.read_text(encoding="utf-8"),
         concurrency=settings.matching_concurrency,
     )
@@ -241,8 +243,22 @@ def build_container(
         repository=job_prospects,
         agent=resume_generation_agent,
     )
+    application_llm = (
+        OpenAILLMService(
+            OpenAILLMConfig(
+                api_key=settings.openai_api_key,
+                model=settings.application_answer_model,
+                timeout_seconds=settings.application_answer_timeout_seconds,
+                max_output_tokens=settings.application_answer_max_output_tokens,
+            )
+        )
+        if settings.openai_api_key
+        else DisabledLLMService(
+            "Application form filling requires OPENAI_API_KEY to be configured"
+        )
+    )
     application_form_agent = ApplicationFormAgent(
-        llm=llm,
+        llm=application_llm,
         prompt_template=settings.application_prompt_path.read_text(encoding="utf-8"),
     )
     return JobAgentContainer(
@@ -812,9 +828,9 @@ async def _run_application_preparation(
     *,
     job_id: str,
 ) -> int:
-    if not container.settings.gemini_api_key:
+    if not container.settings.openai_api_key:
         logging.getLogger(__name__).error(
-            "Application form filling requires GEMINI_API_KEY to be configured"
+            "Application form filling requires OPENAI_API_KEY to be configured"
         )
         return 1
     try:

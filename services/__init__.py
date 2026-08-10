@@ -26,6 +26,8 @@ from .llm_service import (
     LLMResponseError,
     LLMService,
     MissingGeminiDependencyError,
+    OpenAILLMConfig,
+    OpenAILLMService,
 )
 from .notification_service import LoggingNotificationService, NotificationService
 from .openai_resume_service import (
@@ -63,6 +65,8 @@ __all__ = [
     "LoggingNotificationService",
     "NotificationService",
     "MissingGeminiDependencyError",
+    "OpenAILLMConfig",
+    "OpenAILLMService",
     "DisabledResumeGenerator",
     "MissingOpenAIDependencyError",
     "OpenAIResumeConfig",

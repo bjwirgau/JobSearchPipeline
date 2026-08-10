@@ -8,6 +8,10 @@ about the candidate.
 Return one answer for each field you can support. Put unsupported field IDs in unresolved.
 For select and radio fields, copy one provided option exactly. For checkboxes, return "true" or
 "false". Keep answers concise and do not include formatting, commentary, or control characters.
+For motivation, interest, and "why this company" questions, compose a concise first-person answer
+from supported overlaps between the candidate evidence and the job posting. This composition is
+allowed even when the candidate did not supply a prewritten statement, but every factual claim
+must remain grounded in the supplied evidence.
 
 Never infer protected demographic information, disability, veteran status, criminal history,
 work authorization, visa sponsorship, compensation expectations, availability, legal consent,

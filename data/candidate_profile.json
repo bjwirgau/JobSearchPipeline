@@ -8,6 +8,7 @@
   "github_url": "https://www.github.com/bjwirgau",
   "website_url": "https://www.brandonwirgau.com",
   "location": "El Paso, TX",
+  "country": "United States",
   "summary": "Senior Software Engineer with 10+ years of experience building scalable e-commerce and web applications using Adobe Commerce (Magento), PHP frameworks such as Laravel, and modern JavaScript frameworks including React and Next.js. Proven track record of delivering high-performance solutions, improving conversion rates, and leading cross-functional initiatives. Experienced in system architecture, API integrations, DevOps, CI/CD, cloud infrastructure, security, database optimization, and technical leadership. Currently pursuing a Master of Science in Applied Artificial Intelligence.",
   "skills": [
     "Adobe Commerce (Magento)",
@@ -235,5 +236,17 @@
   "remote_preference": "remote",
   "remote_country": "US",
   "resume_path": "BrandonWirgau_SeniorSoftwareEngineer_Resume.pdf",
-  "application_answers": {}
+  "application_answers": {
+    "Country": "1",
+    "Location (City)": "El Paso, TX",
+    "What are your salary expectations?": "120,000 - 130,000",
+    "What is your work authorization status?": "U.S. Citizen",
+    "Do you hold any Salesforce.com certifications or have equivalent experience?": "No",
+    "Gender": "Male",
+    "Veteran Status": "I am not a protected veteran",
+    "Are you Hispanic/Latino?": "No",
+    "Please identify your race": "White",
+    "Disability Status": "No, I do not have a disability and have not had one in the past",
+    "How did you hear about this job?": "Greenhouse Job Board"
+  }
 }

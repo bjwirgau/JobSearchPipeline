@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,13 @@ from models import (
     ApplicationFormField,
 )
 from utils.text import normalize_text
+
+
+LOGGER = logging.getLogger(__name__)
+
+COMBOBOX_OPTION_WAIT_SECONDS = 1.0
+COMBOBOX_POLL_INTERVAL_SECONDS = 0.05
+NAVIGATION_SETTLE_SECONDS = 0.2
 
 
 class ApplicationBrowserDisabledError(RuntimeError):
@@ -89,7 +97,10 @@ class SeleniumApplicationBrowser:
         driver = self._create_driver()
         try:
             driver.set_page_load_timeout(self._timeout_seconds)
-            driver.implicitly_wait(min(self._timeout_seconds, 10))
+            # Missing optional controls and frames are expected. A global implicit
+            # wait makes every negative lookup block, so dynamic controls use the
+            # narrowly scoped polling below instead.
+            driver.implicitly_wait(0)
             driver.get(url)
         except Exception as error:
             driver.quit()
@@ -334,7 +345,7 @@ class SeleniumApplicationSession:
                     inside_form = True
                 if inside_form:
                     continue
-                control.click()
+                self._activate_control(control, label=label)
                 self._wait_after_navigation()
                 self._driver.switch_to.default_content()
                 return True
@@ -355,7 +366,7 @@ class SeleniumApplicationSession:
                 label = self._control_label(control)
                 if not self._is_progress_label(label):
                     continue
-                control.click()
+                self._activate_control(control, label=label)
                 self._wait_after_navigation()
                 self._driver.switch_to.default_content()
                 return True
@@ -423,6 +434,7 @@ class SeleniumApplicationSession:
         label = self._label(element)
         if not label:
             return None
+        role = str(element.get_attribute("role") or "").casefold()
         if tag == "textarea":
             kind = ApplicationFieldKind.TEXTAREA
             options: tuple[str, ...] = ()
@@ -436,6 +448,9 @@ class SeleniumApplicationSession:
             )
             if not options:
                 return None
+        elif role == "combobox":
+            kind = ApplicationFieldKind.COMBOBOX
+            options = ()
         elif input_type == "checkbox":
             kind = ApplicationFieldKind.CHECKBOX
             options = ()
@@ -471,6 +486,8 @@ class SeleniumApplicationSession:
                     "install Selenium support with: pip install -e '.[browser]'"
                 ) from error
             Select(element).select_by_visible_text(answer)
+        elif field.kind is ApplicationFieldKind.COMBOBOX:
+            self._fill_combobox(element, answer, label=field.label)
         elif field.kind is ApplicationFieldKind.RADIO:
             normalized = normalize_text(answer)
             for label, option in zip(target.option_labels, target.elements):
@@ -486,6 +503,56 @@ class SeleniumApplicationSession:
         else:
             element.clear()
             element.send_keys(answer.replace("\r", " ").replace("\n", " "))
+
+    def _fill_combobox(self, element: Any, answer: str, *, label: str) -> None:
+        self._activate_control(element, label=label)
+        element.clear()
+        element.send_keys(answer.replace("\r", " ").replace("\n", " "))
+
+        deadline = time.monotonic() + min(
+            self._timeout_seconds,
+            COMBOBOX_OPTION_WAIT_SECONDS,
+        )
+        while time.monotonic() < deadline:
+            options = tuple(
+                option
+                for option in self._driver.find_elements(
+                    "css selector",
+                    "[role='option']",
+                )
+                if self._is_interactable(option)
+            )
+            if options:
+                normalized_answer = normalize_text(answer)
+                option = next(
+                    (
+                        candidate
+                        for candidate in options
+                        if normalize_text(self._control_label(candidate))
+                        == normalized_answer
+                    ),
+                    next(
+                        (
+                            candidate
+                            for candidate in options
+                            if normalize_text(self._control_label(candidate)).startswith(
+                                normalized_answer
+                            )
+                        ),
+                        options[0],
+                    ),
+                )
+                self._activate_control(
+                    option,
+                    label=self._control_label(option) or label,
+                )
+                return
+            time.sleep(COMBOBOX_POLL_INTERVAL_SECONDS)
+
+        # W3C WebDriver key codes for Arrow Down and Enter. This is the
+        # standard fallback when a combobox does not expose role=option nodes.
+        element.send_keys("\ue015")
+        element.send_keys("\ue007")
 
     def _frame_paths(self) -> tuple[tuple[int, ...], ...]:
         paths: list[tuple[int, ...]] = [()]
@@ -515,6 +582,15 @@ class SeleniumApplicationSession:
             label = self._driver.execute_script(
                 """
                 const element = arguments[0];
+                const group = element.closest('[role="group"][aria-labelledby]');
+                if (group) {
+                    const groupLabel = document.getElementById(
+                        group.getAttribute('aria-labelledby')
+                    );
+                    if (groupLabel && groupLabel.innerText.trim()) {
+                        return groupLabel.innerText.trim();
+                    }
+                }
                 const labels = element.labels ? Array.from(element.labels) : [];
                 const explicit = labels.map(value => value.innerText).join(' ').trim();
                 if (explicit) return explicit;
@@ -553,11 +629,23 @@ class SeleniumApplicationSession:
             return ""
         return " ".join(value.split()) if isinstance(value, str) else ""
 
-    @staticmethod
-    def _required(element: Any) -> bool:
-        return element.get_attribute("required") is not None or str(
+    def _required(self, element: Any) -> bool:
+        if element.get_attribute("required") is not None or str(
             element.get_attribute("aria-required") or ""
-        ).casefold() == "true"
+        ).casefold() == "true":
+            return True
+        try:
+            return bool(
+                self._driver.execute_script(
+                    """
+                    const container = arguments[0].closest('[aria-required="true"]');
+                    return Boolean(container);
+                    """,
+                    element,
+                )
+            )
+        except Exception:
+            return False
 
     @staticmethod
     def _is_interactable(element: Any) -> bool:
@@ -585,8 +673,42 @@ class SeleniumApplicationSession:
     def _is_progress_label(self, label: str) -> bool:
         return any(label.startswith(value) for value in self._PROGRESS_LABELS)
 
+    def _activate_control(self, control: Any, *, label: str) -> None:
+        try:
+            self._driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+                control,
+            )
+        except Exception:
+            pass
+
+        try:
+            control.click()
+            return
+        except Exception as native_error:
+            LOGGER.warning(
+                "Native click failed for application control %r; "
+                "using JavaScript click fallback: %s",
+                label,
+                type(native_error).__name__,
+            )
+            try:
+                self._driver.execute_script("arguments[0].click();", control)
+            except Exception as fallback_error:
+                raise ApplicationBrowserNavigationError(
+                    f"could not activate application control {label!r}: "
+                    f"native click failed with {type(native_error).__name__}; "
+                    "JavaScript click fallback failed with "
+                    f"{type(fallback_error).__name__}"
+                ) from fallback_error
+
     def _wait_after_navigation(self) -> None:
-        time.sleep(min(1.0, max(0.1, self._timeout_seconds / 30)))
+        time.sleep(
+            min(
+                NAVIGATION_SETTLE_SECONDS,
+                max(0.05, self._timeout_seconds / 150),
+            )
+        )
 
     def _ensure_open(self) -> None:
         if self._closed:

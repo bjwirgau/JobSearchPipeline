@@ -10,6 +10,7 @@ class ApplicationFieldKind(str, Enum):
     TEXT = "text"
     TEXTAREA = "textarea"
     SELECT = "select"
+    COMBOBOX = "combobox"
     RADIO = "radio"
     CHECKBOX = "checkbox"
     FILE = "file"

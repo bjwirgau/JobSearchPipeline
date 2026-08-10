@@ -120,6 +120,7 @@ class ResumeKnowledgeTests(unittest.TestCase):
 
         self.assertEqual(candidate.candidate_id, knowledge.candidate_id)
         self.assertEqual(candidate.phone, payload.get("phone", ""))
+        self.assertEqual(candidate.country, payload.get("country", ""))
         self.assertEqual(candidate.linkedin_url, payload.get("linkedin_url", ""))
         self.assertEqual(candidate.github_url, payload.get("github_url", ""))
         self.assertEqual(candidate.website_url, payload.get("website_url", ""))

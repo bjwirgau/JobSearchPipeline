@@ -53,6 +53,7 @@ class ApplicationFormAgentTests(unittest.IsolatedAsyncioTestCase):
             email="private@example.com",
             phone="555-123-4567",
             location="Denver, CO",
+            country="US",
             summary="Builds reliable platforms.",
             skills=("Python",),
             application_answers={
@@ -99,6 +100,12 @@ class ApplicationFormAgentTests(unittest.IsolatedAsyncioTestCase):
                 required=True,
             ),
             ApplicationFormField(
+                "country",
+                "Country",
+                ApplicationFieldKind.COMBOBOX,
+                required=True,
+            ),
+            ApplicationFormField(
                 "sponsorship",
                 "Will you now or in the future require sponsorship?",
                 ApplicationFieldKind.RADIO,
@@ -134,6 +141,7 @@ class ApplicationFormAgentTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.answers["first-name"], "Private")
         self.assertEqual(result.answers["email"], "private@example.com")
+        self.assertEqual(result.answers["country"], "United States")
         self.assertEqual(result.answers["sponsorship"], "No")
         self.assertIn("supported platform experience", result.answers["motivation"])
         self.assertEqual(

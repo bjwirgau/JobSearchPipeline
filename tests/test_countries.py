@@ -93,6 +93,9 @@ class CountryEligibilityTests(unittest.TestCase):
                 "JOB_AGENT_APPLICATION_BROWSER_HEADLESS": "true",
                 "JOB_AGENT_APPLICATION_BROWSER_TIMEOUT_SECONDS": "20",
                 "JOB_AGENT_APPLICATION_MAX_STEPS": "5",
+                "JOB_AGENT_APPLICATION_ANSWER_MODEL": "gpt-5.4",
+                "JOB_AGENT_APPLICATION_ANSWER_TIMEOUT_SECONDS": "40",
+                "JOB_AGENT_APPLICATION_ANSWER_MAX_OUTPUT_TOKENS": "1800",
             }
         )
 
@@ -111,6 +114,9 @@ class CountryEligibilityTests(unittest.TestCase):
         self.assertTrue(settings.application_browser_headless)
         self.assertEqual(settings.application_browser_timeout_seconds, 20)
         self.assertEqual(settings.application_max_steps, 5)
+        self.assertEqual(settings.application_answer_model, "gpt-5.4")
+        self.assertEqual(settings.application_answer_timeout_seconds, 40)
+        self.assertEqual(settings.application_answer_max_output_tokens, 1800)
         self.assertNotIn("secret", repr(settings))
         with self.assertRaisesRegex(ValueError, "MATCHING_CONCURRENCY"):
             Settings.from_env({"JOB_AGENT_MATCHING_CONCURRENCY": "21"})
@@ -132,6 +138,17 @@ class CountryEligibilityTests(unittest.TestCase):
             Settings.from_env({"JOB_AGENT_APPLICATION_BROWSER_TIMEOUT_SECONDS": "0"})
         with self.assertRaisesRegex(ValueError, "APPLICATION_MAX_STEPS"):
             Settings.from_env({"JOB_AGENT_APPLICATION_MAX_STEPS": "16"})
+        with self.assertRaisesRegex(ValueError, "APPLICATION_ANSWER_MODEL"):
+            Settings.from_env({"JOB_AGENT_APPLICATION_ANSWER_MODEL": ""})
+        with self.assertRaisesRegex(ValueError, "APPLICATION_ANSWER_TIMEOUT_SECONDS"):
+            Settings.from_env({"JOB_AGENT_APPLICATION_ANSWER_TIMEOUT_SECONDS": "0"})
+        with self.assertRaisesRegex(
+            ValueError,
+            "APPLICATION_ANSWER_MAX_OUTPUT_TOKENS",
+        ):
+            Settings.from_env(
+                {"JOB_AGENT_APPLICATION_ANSWER_MAX_OUTPUT_TOKENS": "0"}
+            )
 
     def test_greenhouse_board_limit_is_validated(self) -> None:
         settings = Settings.from_env(

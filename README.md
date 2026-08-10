@@ -50,6 +50,7 @@ The resume knowledge base turns resume facts into validated JSON that matching c
   "github_url": "https://github.com/example-candidate",
   "website_url": "https://example.dev",
   "location": "Denver, CO",
+  "country": "United States",
   "skills": ["Magento", "PHP", "Laravel", "React", "MySQL", "AWS"],
   "additional_keywords": ["Technical Leadership", "Cross-functional Collaboration"],
   "application_answers": {
@@ -121,8 +122,9 @@ The knowledge layer includes:
 
 Set `phone`, `linkedin_url`, `github_url`, and `website_url` in
 `data/candidate_profile.json` to include them in generated resume contact details.
-An empty value omits that field. Candidate name, email, phone, location, and profile
-links are inserted locally and are not sent to the resume-generation model.
+Set `country` to select country controls on application forms. An empty value omits
+that field. Candidate name, email, phone, location, and profile links are inserted
+locally and are not sent to the resume-generation model.
 
 Phase 2 does not extract a PDF automatically. Review and correct the structured JSON before using it for matching; this prevents unsupported experience claims from becoming part of an application.
 
@@ -329,16 +331,23 @@ interactive review will occur:
 python3 -m pip install -e '.[browser]'
 ```
 
-Configure the review-only browser and Gemini form-answer agent in `.env`:
+Configure the review-only browser and GPT-5.4 form-answer agent in `.env`:
 
 ```env
-GEMINI_API_KEY=your-api-key
+OPENAI_API_KEY=your-api-key
 JOB_AGENT_APPLICATION_BROWSER_ENABLED=true
 JOB_AGENT_APPLICATION_BROWSER_HEADLESS=false
 JOB_AGENT_APPLICATION_BROWSER_TIMEOUT_SECONDS=30
+JOB_AGENT_APPLICATION_ANSWER_MODEL=gpt-5.4
+JOB_AGENT_APPLICATION_ANSWER_TIMEOUT_SECONDS=60
+JOB_AGENT_APPLICATION_ANSWER_MAX_OUTPUT_TOKENS=1500
 JOB_AGENT_APPLICATION_MAX_STEPS=10
 JOB_AGENT_APPLICATION_PROMPT=prompts/fill_application.txt
 ```
+
+`JOB_AGENT_APPLICATION_BROWSER_TIMEOUT_SECONDS` controls full page navigation.
+Ordinary field discovery has no implicit Selenium delay; dynamic combobox options
+wait for at most one second and navigation controls settle for at most 0.2 seconds.
 
 Select a prospect that already has a generated resume:
 
@@ -357,8 +366,9 @@ python3 app.py --prepare-application JOB_ID
 
 The command opens the stored job URL in Chrome, follows a visible external
 **Apply** link when needed, discovers native fields in the page and embedded
-frames, fills contact details locally, asks Gemini for evidence-grounded answers
-to remaining questions, and uploads the exact file named by
+frames, fills contact details locally, asks GPT-5.4 for evidence-grounded answers
+to remaining questions through a non-stored OpenAI Responses API request, and
+uploads the exact file named by
 `job_prospects.resume_file_name`. Safe **Next**, **Continue**, and review steps
 are supported up to the configured limit. The stored application resume must be
 a DOCX or PDF; regenerate an HTML-only resume with `--resume-format docx` first.
@@ -376,6 +386,14 @@ open for review until Enter is pressed in the terminal; that Enter closes the
 browser rather than submitting the form. CAPTCHA, login, shadow-DOM widgets,
 and site-specific controls may require manual handling. No application status
 is persisted yet, and job-board terms still apply.
+
+Every generated or pre-existing form answer is emitted as a structured `INFO`
+log event named `application_form_answer`, including the job ID, step, field ID,
+label, answer source, fill status, and complete value. Resume uploads and
+unresolved fields are logged as well. These records contain personal and
+potentially sensitive application data, so restrict access to terminal, SSM,
+CloudWatch, and redirected log output and configure an appropriate retention
+period.
 
 ### Enable and Configure Job Searching
 

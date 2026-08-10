@@ -228,6 +228,8 @@ class ApplicationFormAgent:
             return candidate.email
         if "phone" in label or "mobile" in label:
             return candidate.phone or None
+        if label == "country" or label.startswith("phone country"):
+            return _country_form_value(candidate.country) or None
         if "linkedin" in label:
             return candidate.linkedin_url or None
         if "github" in label:
@@ -319,6 +321,18 @@ def _approved_answer(label: str, answers: Mapping[str, str]) -> str | None:
         ):
             return answer
     return None
+
+
+def _country_form_value(value: str) -> str:
+    normalized = value.strip().casefold()
+    names = {
+        "us": "United States",
+        "usa": "United States",
+        "u.s.": "United States",
+        "gb": "United Kingdom",
+        "uk": "United Kingdom",
+    }
+    return names.get(normalized, value.strip())
 
 
 def _canonical_value(field: ApplicationFormField, value: str) -> str | None:

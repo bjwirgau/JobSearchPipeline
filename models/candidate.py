@@ -14,6 +14,7 @@ class CandidateProfile:
     email: str
     phone: str = ""
     location: str = ""
+    country: str = ""
     summary: str = ""
     skills: tuple[str, ...] = ()
     years_experience: float = 0.0
@@ -36,7 +37,14 @@ class CandidateProfile:
             if not value:
                 raise ValueError(f"{field_name} must not be empty")
             object.__setattr__(self, field_name, value)
-        for field_name in ("phone", "linkedin_url", "github_url", "website_url"):
+        for field_name in (
+            "phone",
+            "location",
+            "country",
+            "linkedin_url",
+            "github_url",
+            "website_url",
+        ):
             object.__setattr__(self, field_name, getattr(self, field_name).strip())
         if self.years_experience < 0:
             raise ValueError("years_experience must not be negative")
@@ -69,6 +77,7 @@ class CandidateProfile:
             "email": self.email,
             "phone": self.phone,
             "location": self.location,
+            "country": self.country,
             "summary": self.summary,
             "skills": list(self.skills),
             "additional_keywords": list(self.additional_keywords),
@@ -86,6 +95,7 @@ class CandidateProfile:
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "CandidateProfile":
         phone = value.get("phone")
+        country = value.get("country", value.get("remote_country"))
         linkedin_url = value.get("linkedin_url")
         github_url = value.get("github_url")
         website_url = value.get("website_url")
@@ -95,6 +105,7 @@ class CandidateProfile:
             email=str(value["email"]),
             phone=str(phone) if phone is not None else "",
             location=str(value.get("location", "")),
+            country=str(country) if country is not None else "",
             summary=str(value.get("summary", "")),
             skills=tuple(value.get("skills", ())),
             years_experience=float(value.get("years_experience", 0)),

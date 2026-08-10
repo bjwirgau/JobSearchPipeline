@@ -1,4 +1,4 @@
-"""Gemini API service tests without network access."""
+"""Gemini and OpenAI LLM service tests without network access."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ from services import (
     GeminiLLMService,
     LLMNotConfiguredError,
     LLMResponseError,
+    OpenAILLMConfig,
+    OpenAILLMService,
 )
 
 
@@ -21,6 +23,18 @@ class FakeModels:
         self.calls: list[dict[str, object]] = []
 
     async def generate_content(self, **arguments: object) -> object:
+        self.calls.append(arguments)
+        if isinstance(self.output, Exception):
+            raise self.output
+        return self.output
+
+
+class FakeResponses:
+    def __init__(self, output: object) -> None:
+        self.output = output
+        self.calls: list[dict[str, object]] = []
+
+    def create(self, **arguments: object) -> object:
         self.calls.append(arguments)
         if isinstance(self.output, Exception):
             raise self.output
@@ -105,6 +119,67 @@ class GeminiLLMServiceTests(unittest.IsolatedAsyncioTestCase):
                 "Evaluate",
                 schema={"type": "object"},
             )
+
+
+class OpenAILLMServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_requests_non_stored_structured_output_with_gpt_5_4(self) -> None:
+        responses = FakeResponses(
+            SimpleNamespace(output_text=json.dumps({"answers": [], "unresolved": []}))
+        )
+        service = OpenAILLMService(
+            OpenAILLMConfig(
+                api_key="secret-key",
+                model="gpt-5.4",
+                max_output_tokens=2_000,
+            ),
+            client=SimpleNamespace(responses=responses),
+        )
+        schema = {
+            "type": "object",
+            "properties": {
+                "answers": {"type": "array", "items": {"type": "object"}},
+                "unresolved": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["answers", "unresolved"],
+            "additionalProperties": False,
+        }
+
+        result = await service.generate_structured("Fill fields", schema=schema)
+
+        self.assertEqual(result, {"answers": [], "unresolved": []})
+        request = responses.calls[0]
+        self.assertEqual(request["model"], "gpt-5.4")
+        self.assertEqual(request["input"], "Fill fields")
+        self.assertEqual(request["max_output_tokens"], 2_000)
+        self.assertFalse(request["store"])
+        response_format = request["text"]["format"]
+        self.assertEqual(response_format["type"], "json_schema")
+        self.assertEqual(response_format["name"], "application_form_answers")
+        self.assertTrue(response_format["strict"])
+        self.assertEqual(response_format["schema"], schema)
+        self.assertNotIn("secret-key", repr(service))
+
+    async def test_redacts_openai_api_key_from_provider_errors(self) -> None:
+        service = OpenAILLMService(
+            OpenAILLMConfig(api_key="secret-key"),
+            client=SimpleNamespace(
+                responses=FakeResponses(RuntimeError("secret-key was rejected"))
+            ),
+        )
+
+        with self.assertRaises(LLMResponseError) as raised:
+            await service.generate_text("Fill fields")
+
+        self.assertIn("OpenAI request failed", str(raised.exception))
+        self.assertNotIn("secret-key", str(raised.exception))
+
+    async def test_disabled_service_can_explain_openai_configuration(self) -> None:
+        service = DisabledLLMService(
+            "Application form filling requires OPENAI_API_KEY to be configured"
+        )
+
+        with self.assertRaisesRegex(LLMNotConfiguredError, "OPENAI_API_KEY"):
+            await service.generate_structured("Fill fields", schema={"type": "object"})
 
 
 if __name__ == "__main__":

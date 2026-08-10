@@ -15,6 +15,7 @@ from models import (
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 GEMINI_MAX_REQUESTS_PER_RUN = 15
+APPLICATION_MAX_STEPS = 15
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +132,9 @@ class Settings:
     application_browser_headless: bool = False
     application_browser_timeout_seconds: float = 30.0
     application_max_steps: int = 10
+    application_answer_model: str = "gpt-5.4"
+    application_answer_timeout_seconds: float = 60.0
+    application_answer_max_output_tokens: int = 1_500
     application_prompt_path: Path = PROJECT_ROOT / "prompts" / "fill_application.txt"
 
     @classmethod
@@ -294,6 +298,16 @@ class Settings:
             application_max_steps=int(
                 values.get("JOB_AGENT_APPLICATION_MAX_STEPS", "10")
             ),
+            application_answer_model=values.get(
+                "JOB_AGENT_APPLICATION_ANSWER_MODEL",
+                "gpt-5.4",
+            ).strip(),
+            application_answer_timeout_seconds=float(
+                values.get("JOB_AGENT_APPLICATION_ANSWER_TIMEOUT_SECONDS", "60")
+            ),
+            application_answer_max_output_tokens=int(
+                values.get("JOB_AGENT_APPLICATION_ANSWER_MAX_OUTPUT_TOKENS", "1500")
+            ),
             application_prompt_path=_resolve_path(
                 values.get(
                     "JOB_AGENT_APPLICATION_PROMPT",
@@ -381,8 +395,18 @@ class Settings:
             raise ValueError(
                 "JOB_AGENT_APPLICATION_BROWSER_TIMEOUT_SECONDS must be greater than zero"
             )
-        if not 1 <= self.application_max_steps <= GEMINI_MAX_REQUESTS_PER_RUN:
+        if not 1 <= self.application_max_steps <= APPLICATION_MAX_STEPS:
             raise ValueError("JOB_AGENT_APPLICATION_MAX_STEPS must be between 1 and 15")
+        if not self.application_answer_model:
+            raise ValueError("JOB_AGENT_APPLICATION_ANSWER_MODEL must not be empty")
+        if self.application_answer_timeout_seconds <= 0:
+            raise ValueError(
+                "JOB_AGENT_APPLICATION_ANSWER_TIMEOUT_SECONDS must be greater than zero"
+            )
+        if self.application_answer_max_output_tokens <= 0:
+            raise ValueError(
+                "JOB_AGENT_APPLICATION_ANSWER_MAX_OUTPUT_TOKENS must be greater than zero"
+            )
         if bool(self.adzuna_app_id) != bool(self.adzuna_app_key):
             raise ValueError(
                 "JOB_AGENT_ADZUNA_APP_ID and JOB_AGENT_ADZUNA_APP_KEY must be set together"
